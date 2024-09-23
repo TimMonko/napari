@@ -56,6 +56,8 @@ coverage==7.6.1
     # via
     #   napari (napari_repo/pyproject.toml)
     #   pytest-cov
+crc32c==2.7.post1
+    # via zarr
 cycler==0.12.1
     # via matplotlib
 dask==2024.9.0
@@ -72,6 +74,8 @@ docstring-parser==0.16
     #   magicgui
 docutils==0.21.2
     # via sphinx
+donfig==0.8.1.post1
+    # via zarr
 executing==2.1.0
     # via stack-data
 fasteners==0.19
@@ -93,6 +97,7 @@ fsspec==2024.9.0
     #   napari (napari_repo/pyproject.toml)
     #   dask
     #   torch
+    #   zarr
 heapdict==1.0.1
     # via cachey
 hsluv==5.0.4
@@ -384,6 +389,7 @@ pyyaml==6.0.2
     # via
     #   napari (napari_repo/pyproject.toml)
     #   dask
+    #   donfig
     #   npe2
 pyzmq==26.2.0
     # via
@@ -518,6 +524,7 @@ typing-extensions==4.12.2
     #   superqt
     #   torch
     #   typer
+    #   zarr
 tzdata==2024.1
     # via pandas
 urllib3==2.2.3
@@ -534,7 +541,7 @@ wrapt==1.16.0
     # via napari (napari_repo/pyproject.toml)
 xarray==2024.9.0
     # via napari (napari_repo/pyproject.toml)
-zarr==2.18.3
+zarr==3.0.0a5
     # via
     #   -r napari_repo/resources/constraints/version_denylist.txt
     #   napari (napari_repo/pyproject.toml)

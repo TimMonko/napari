@@ -4,7 +4,7 @@ accessible-pygments==0.0.5
     # via pydata-sphinx-theme
 alabaster==0.7.16
     # via sphinx
-anyio==4.5.0
+anyio==4.6.0
     # via
     #   starlette
     #   watchfiles
@@ -634,7 +634,7 @@ sqlalchemy==2.0.35
     # via jupyter-cache
 stack-data==0.6.3
     # via ipython
-starlette==0.38.5
+starlette==0.39.0
     # via sphinx-autobuild
 superqt==0.6.7
     # via
@@ -731,7 +731,7 @@ watchfiles==0.24.0
     # via sphinx-autobuild
 wcwidth==0.2.13
     # via prompt-toolkit
-websockets==13.0.1
+websockets==13.1
     # via sphinx-autobuild
 wrapt==1.16.0
     # via napari (napari_repo/pyproject.toml)
