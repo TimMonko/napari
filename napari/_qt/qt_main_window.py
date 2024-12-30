@@ -1781,7 +1781,7 @@ class Window:
             imsave(path, img)
         return img
 
-    def clipboard(self, flash=False, canvas_only=False):
+    def clipboard(self, flash=True, canvas_only=False):
         """Copy screenshot of current viewer to the clipboard.
 
         Parameters
