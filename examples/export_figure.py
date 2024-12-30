@@ -101,7 +101,7 @@ viewer.scale_bar.length = 250
 # are not in the exported figure.
 viewer.theme = "light"
 # Optionally for saving the exported figure: viewer.export_figure(path="export_figure.png")
-export_figure = viewer.export_figure(flash=False) # bug: default flash=True causes the canvas to be grayscale in docs
+export_figure = viewer.export_figure(flash=False)
 scaled_export_figure = viewer.export_figure(scale_factor=5, flash=False)
 viewer.theme = "dark"
 

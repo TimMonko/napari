@@ -59,7 +59,7 @@ viewer.scale_bar.box = True
 # Take screenshots and export figures in 'light' theme, to show the canvas
 # margins and the extent of the exported figure.
 viewer.theme = 'light'
-screenshot = viewer.screenshot(flash=False) # bug: default flash=True causes the canvas to be grayscale in docs
+screenshot = viewer.screenshot(flash=False)
 figure = viewer.export_figure(flash=False)
 # optionally, save the exported figure: viewer.export_figure(path='export_figure.png')
 # or screenshot: viewer.screenshot(path='screenshot.png')
