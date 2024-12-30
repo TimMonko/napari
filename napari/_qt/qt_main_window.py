@@ -1588,7 +1588,7 @@ class Window:
         self,
         size: Optional[tuple[int, int]] = None,
         scale: Optional[float] = None,
-        flash: bool = False,
+        flash: bool = True,
         canvas_only: bool = False,
         fit_to_data_extent: bool = False,
     ) -> 'QImage':
@@ -1781,7 +1781,7 @@ class Window:
             imsave(path, img)
         return img
 
-    def clipboard(self, flash=True, canvas_only=False):
+    def clipboard(self, flash=False, canvas_only=False):
         """Copy screenshot of current viewer to the clipboard.
 
         Parameters
