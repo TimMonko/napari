@@ -1588,7 +1588,7 @@ class Window:
         self,
         size: Optional[tuple[int, int]] = None,
         scale: Optional[float] = None,
-        flash: bool = True,
+        flash: bool = False,
         canvas_only: bool = False,
         fit_to_data_extent: bool = False,
     ) -> 'QImage':
