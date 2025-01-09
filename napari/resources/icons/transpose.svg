@@ -1,12 +1,95 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Generator: Adobe Illustrator 23.0.6, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
-<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-	 viewBox="0 0 100 100" style="enable-background:new 0 0 100 100;" xml:space="preserve">
-<g>
-	<g id="reply">
-		<path d="M68.8,15.7l3.4-8.8l-21.4,9.6l9.6,21.4l3.5-9.1c11.1,4.2,17.4,10.7,20,20.6C85.9,37.4,83.5,23.8,68.8,15.7z"/>
+
+<svg
+   version="1.1"
+   id="Layer_1"
+   x="0px"
+   y="0px"
+   viewBox="0 0 100 100"
+   style="enable-background:new 0 0 100 100;"
+   xml:space="preserve"
+   sodipodi:docname="transpose.svg"
+   inkscape:version="1.4 (86a8ad7, 2024-10-11)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+   id="defs2"><inkscape:path-effect
+     effect="fillet_chamfer"
+     id="path-effect9-2-5"
+     is_visible="true"
+     lpeversion="1"
+     nodesatellites_param="F,0,0,1,0,3.327376,0,1 @ F,0,0,1,0,1.5724997,0,1 @ F,0,0,1,0,2.8827329,0,1"
+     radius="0"
+     unit="px"
+     method="auto"
+     mode="F"
+     chamfer_steps="1"
+     flexible="false"
+     use_knot_distance="true"
+     apply_no_radius="true"
+     apply_with_radius="true"
+     only_selected="false"
+     hide_knots="false" /><inkscape:path-effect
+     effect="fillet_chamfer"
+     id="path-effect9"
+     is_visible="true"
+     lpeversion="1"
+     nodesatellites_param="F,0,0,1,0,1.4620091,0,1 @ F,0,0,1,0,1.5724997,0,1 @ F,0,0,1,0,1.1921008,0,1 @ F,0,0,1,0,1.1280927,0,1 @ F,0,0,1,0,0.85118611,0,1 @ F,0,0,1,0,0.97478932,0,1"
+     radius="0"
+     unit="px"
+     method="auto"
+     mode="F"
+     chamfer_steps="1"
+     flexible="false"
+     use_knot_distance="true"
+     apply_no_radius="true"
+     apply_with_radius="true"
+     only_selected="false"
+     hide_knots="false" /></defs><sodipodi:namedview
+   id="namedview2"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   inkscape:zoom="18.15"
+   inkscape:cx="76.143251"
+   inkscape:cy="21.129477"
+   inkscape:window-width="3840"
+   inkscape:window-height="2054"
+   inkscape:window-x="-11"
+   inkscape:window-y="244"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="Layer_1" />
+<g
+   id="g1">
+	<g
+   id="reply">
+		<path
+   d="M68.8,15.7l3.4-8.8l-21.4,9.6l9.6,21.4l3.5-9.1c11.1,4.2,17.4,10.7,20,20.6C85.9,37.4,83.5,23.8,68.8,15.7z"
+   id="path1" />
 	</g>
 </g>
-<path d="M52,91.9H17.5c-4.9,0-8.7-3.8-8.7-8.7V48.6c0-4.9,3.8-8.7,8.7-8.7h34.4c4.9,0,8.7,3.8,8.7,8.7v34.4
-	C60.7,88,56.9,91.9,52,91.9z M19.3,81.3h30.9V50.4H19.3V81.3z"/>
-</svg>
+<path
+   d="M52,91.9H17.5c-4.9,0-8.7-3.8-8.7-8.7V48.6c0-4.9,3.8-8.7,8.7-8.7h34.4c4.9,0,8.7,3.8,8.7,8.7v34.4  C60.7,88,56.9,91.9,52,91.9z M19.3,81.3h30.9V50.4H19.3V81.3z"
+   id="path2" />
+<rect
+   x="70.400002"
+   y="12"
+   width="16.799999"
+   height="16.799999"
+   id="rect3-4-8"
+   transform="matrix(0.64647965,0,0,0.64647965,-43.2065,-5.5208412)"
+   ry="2.0288317" /><path
+   d="m 51.4,27.9 c 1.9,0 3.8,0.8 5,2.4 l 28.2,35.1 c 2.2,2.8 1.8,6.9 -1,9.1 -2.8,2.2 -13.953368,0.0607 -16.153368,-2.739303 L 50.94614,51.327389 C 48.74614,48.527389 44.5,31.5 47.3,29.3 c 1.2,-1 2.7,-1.4 4.1,-1.4 z"
+   id="path1-8"
+   transform="matrix(0.22998809,0.18345975,-0.18345975,0.22998809,88.941976,-12.282819)"
+   sodipodi:nodetypes="sccscccs" /><path
+   d="m 51.4,27.9 c 1.9,0 15.727389,5.25386 16.927389,6.85386 l 15.95892,21.830866 C 86.486309,59.384726 86.4,72.3 83.6,74.5 c -2.8,2.2 -6.9,1.8 -9.1,-1 L 46.3,38.4 c -2.2,-2.8 -1.8,-6.9 1,-9.1 1.2,-1 2.7,-1.4 4.1,-1.4 z"
+   id="path1-8-2"
+   transform="matrix(-0.18345975,0.22998809,-0.22998809,-0.18345975,111.77077,-0.47011661)"
+   sodipodi:nodetypes="sccscccs" /></svg>

@@ -1,9 +1,84 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Generator: Adobe Illustrator 23.0.1, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
-<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-	 viewBox="0 0 100 100" style="enable-background:new 0 0 100 100;" xml:space="preserve">
-<circle cx="59.6" cy="42.7" r="4.9"/>
-<path d="M41.1,84.2c-1,0-2-0.4-2.7-1.3l-22-26.7c-1.2-1.5-1-3.7,0.5-4.9l31.9-26.4c0.6-0.5,1.4-0.8,2.2-0.8c0,0,0,0,0,0l27.1,0.1
-	c1,0,2,0.5,2.7,1.3c0.7,0.8,0.9,1.9,0.7,2.9L76.5,55c-0.2,0.8-0.6,1.5-1.2,2L43.3,83.4C42.7,83.9,41.9,84.2,41.1,84.2z M24,54.5
-	l17.6,21.3l28.3-23.3l4-21.2l-21.6-0.1L24,54.5z"/>
-</svg>
+
+<svg
+   version="1.1"
+   id="Layer_1"
+   x="0px"
+   y="0px"
+   viewBox="0 0 100 100"
+   style="enable-background:new 0 0 100 100;"
+   xml:space="preserve"
+   sodipodi:docname="new_labels.svg"
+   inkscape:version="1.4 (86a8ad7, 2024-10-11)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+   id="defs1"><inkscape:path-effect
+     effect="fillet_chamfer"
+     id="path-effect9"
+     is_visible="true"
+     lpeversion="1"
+     nodesatellites_param="F,0,0,1,0,1.4620091,0,1 @ F,0,0,1,0,1.5724997,0,1 @ F,0,0,1,0,1.1921008,0,1 @ F,0,0,1,0,1.1280927,0,1 @ F,0,0,1,0,0.85118611,0,1 @ F,0,0,1,0,0.97478932,0,1"
+     radius="0"
+     unit="px"
+     method="auto"
+     mode="F"
+     chamfer_steps="1"
+     flexible="false"
+     use_knot_distance="true"
+     apply_no_radius="true"
+     apply_with_radius="true"
+     only_selected="false"
+     hide_knots="false" /><inkscape:path-effect
+     effect="fillet_chamfer"
+     id="path-effect9-2-5"
+     is_visible="true"
+     lpeversion="1"
+     nodesatellites_param="F,0,0,1,0,3.327376,0,1 @ F,0,0,1,0,1.5724997,0,1 @ F,0,0,1,0,2.8827329,0,1"
+     radius="0"
+     unit="px"
+     method="auto"
+     mode="F"
+     chamfer_steps="1"
+     flexible="false"
+     use_knot_distance="true"
+     apply_no_radius="true"
+     apply_with_radius="true"
+     only_selected="false"
+     hide_knots="false" /></defs><sodipodi:namedview
+   id="namedview1"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   inkscape:zoom="18.15"
+   inkscape:cx="49.972452"
+   inkscape:cy="36.77686"
+   inkscape:window-width="3840"
+   inkscape:window-height="2054"
+   inkscape:window-x="-11"
+   inkscape:window-y="244"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="Layer_1" />
+<circle
+   cx="59.6"
+   cy="42.7"
+   r="4.9"
+   id="circle1" />
+<path
+   d="M41.1,84.2c-1,0-2-0.4-2.7-1.3l-22-26.7c-1.2-1.5-1-3.7,0.5-4.9l31.9-26.4c0.6-0.5,1.4-0.8,2.2-0.8c0,0,0,0,0,0l27.1,0.1  c1,0,2,0.5,2.7,1.3c0.7,0.8,0.9,1.9,0.7,2.9L76.5,55c-0.2,0.8-0.6,1.5-1.2,2L43.3,83.4C42.7,83.9,41.9,84.2,41.1,84.2z M24,54.5  l17.6,21.3l28.3-23.3l4-21.2l-21.6-0.1L24,54.5z"
+   id="path1" />
+<path
+   d="m 51.4,27.9 c 1.9,0 3.8,0.8 5,2.4 l 28.2,35.1 c 2.2,2.8 1.8,6.9 -1,9.1 -2.8,2.2 -13.953368,0.0607 -16.153368,-2.739303 L 50.94614,51.327389 C 48.74614,48.527389 44.5,31.5 47.3,29.3 c 1.2,-1 2.7,-1.4 4.1,-1.4 z"
+   id="path1-8"
+   transform="matrix(0.22998809,0.18345975,-0.18345975,0.22998809,90.245006,-12.960506)"
+   sodipodi:nodetypes="sccscccs" /><path
+   d="m 51.4,27.9 c 1.9,0 15.727389,5.25386 16.927389,6.85386 l 15.95892,21.830866 C 86.486309,59.384726 86.4,72.3 83.6,74.5 c -2.8,2.2 -6.9,1.8 -9.1,-1 L 46.3,38.4 c -2.2,-2.8 -1.8,-6.9 1,-9.1 1.2,-1 2.7,-1.4 4.1,-1.4 z"
+   id="path1-8-2"
+   transform="matrix(-0.18345975,0.22998809,-0.22998809,-0.18345975,113.0738,-1.1478026)"
+   sodipodi:nodetypes="sccscccs" /></svg>
