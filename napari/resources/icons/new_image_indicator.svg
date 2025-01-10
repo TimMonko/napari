@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Adobe Illustrator 23.0.2, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+
+<svg
+   version="1.1"
+   id="Layer_1"
+   x="0px"
+   y="0px"
+   viewBox="0 0 660 440"
+   xml:space="preserve"
+   sodipodi:docname="new_image_indicator.svg"
+   width="660"
+   height="440"
+   inkscape:version="1.4 (86a8ad7, 2024-10-11)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+   id="defs2" /><sodipodi:namedview
+   id="namedview2"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   inkscape:zoom="1.6244989"
+   inkscape:cx="391.19755"
+   inkscape:cy="290.85892"
+   inkscape:window-width="1833"
+   inkscape:window-height="1240"
+   inkscape:window-x="5799"
+   inkscape:window-y="1612"
+   inkscape:window-maximized="0"
+   inkscape:current-layer="Layer_1" />
+<path
+   d="M 373.1,344.4 V 273 c -31,-27.4 -50.3,-44.5 -58,-51.3 -7.5,-6.6 -18.1,-6 -24.9,1.4 -13.3,14.4 -47,51.1 -61.7,67.1 -2.6,2.8 -6.7,3 -9.5,0.3 -7,-6.8 -17.4,-16.9 -22.9,-22.3 -6.8,-6.6 -17,-6.4 -23.5,0.6 -10.4,11.1 -36.3,38.8 -77.9,83.1 z"
+   id="path1" />
+<path
+   d="M 358.4,77.8 H 81.6 c -17,0 -30.8,13.8 -30.8,30.8 v 222.9 c 0,17 13.8,30.8 30.8,30.8 h 276.9 c 17,0 30.8,-13.8 30.8,-30.8 V 108.6 c -0.1,-17 -13.8,-30.8 -30.9,-30.8 z m 7.2,243.4 c 0,11.1 -9,20.1 -20.1,20.1 H 94.8 c -11.1,0 -20.1,-9 -20.1,-20.1 v -202 c 0,-11.1 9,-20.1 20.1,-20.1 h 250.7 c 11.1,0 20.1,9 20.1,20.1 z"
+   id="path2" />
+<circle
+   cx="157.10001"
+   cy="164.2"
+   r="30.4"
+   id="circle2" />
+<path
+   id="rect3-4-8-4"
+   transform="matrix(6.8545708,-0.8476103,-0.8476103,6.8545708,56.569257,9.0626527)"
+   d="m 71.420522,10.283264 12.721572,1.501037 c 1.77685,0.209653 2.947049,1.300805 3.161571,3.082858 l 1.564298,12.994736 c 0.313973,2.608196 -2.178493,2.456405 -3.696794,0.938104 L 70.400002,14.028832 c -1.530564,-1.530564 -1.562153,-4.0503009 1.02052,-3.745568 z"
+   sodipodi:nodetypes="sssssss" /></svg>

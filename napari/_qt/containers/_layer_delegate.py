@@ -114,7 +114,7 @@ class LayerDelegate(QStyledItemDelegate):
             expanded = option.widget.isExpanded(index)
             icon_name = 'folder-open' if expanded else 'folder'
         else:
-            icon_name = f'new_{layer._type_string}'
+            icon_name = f'new_{layer._type_string}_indicator'
 
         try:
             icon = QColoredSVGIcon.from_resources(icon_name)
@@ -123,7 +123,7 @@ class LayerDelegate(QStyledItemDelegate):
         # guessing theme rather than passing it through.
         bg = option.palette.color(option.palette.ColorRole.Window).red()
         option.icon = icon.colored(theme='dark' if bg < 128 else 'light')
-        option.decorationSize = QSize(18, 18)
+        option.decorationSize = QSize(27, 18)
         option.decorationPosition = (
             option.Position.Right
         )  # put icon on the right
