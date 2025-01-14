@@ -6,10 +6,10 @@
    id="Layer_1"
    x="0px"
    y="0px"
-   viewBox="0 0 150 100"
+   viewBox="0 0 100 100"
    xml:space="preserve"
-   sodipodi:docname="new_shapes_indicator.svg"
-   width="150"
+   sodipodi:docname="special_menu_indicator.svg"
+   width="100"
    height="100"
    inkscape:version="1.4 (86a8ad7, 2024-10-11)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
@@ -34,15 +34,13 @@
    inkscape:window-y="244"
    inkscape:window-maximized="1"
    inkscape:current-layer="Layer_1" />
-<polygon
-   points="51.9,79.5 22.8,65.8 29.9,18.1 85.7,67.4 "
-   id="polygon1" />
+
 <path
    d="m 51.4,27.9 c 1.9,0 22.612439,-0.306023 23.812439,1.293977 l 9.07387,27.390749 C 86.16835,62.583342 86.4,72.3 83.6,74.5 c -2.8,2.2 -6.9,1.8 -9.1,-1 L 46.3,38.4 c -2.2,-2.8 -1.8,-6.9 1,-9.1 1.2,-1 2.7,-1.4 4.1,-1.4 z"
    id="path1-8-2-8"
-   transform="matrix(-0.39914797,-0.31839729,0.31839729,-0.39914797,153.13192,123.30659)"
+   transform="matrix(-0.95712719,0.76349305,0.76349305,0.95712719,111.56311,-60.995467)"
    sodipodi:nodetypes="sccscccs" /><path
    d="m 51.4,27.9 c 1.9,0 22.612439,-0.306023 23.812439,1.293977 l 9.07387,27.390749 C 86.16835,62.583342 86.4,72.3 83.6,74.5 c -2.8,2.2 -6.9,1.8 -9.1,-1 L 46.3,38.4 c -2.2,-2.8 -1.8,-6.9 1,-9.1 1.2,-1 2.7,-1.4 4.1,-1.4 z"
    id="path1-8-2-8-1"
-   transform="matrix(-0.31839729,-0.39914797,-0.39914797,0.31839729,173.65034,102.80546)"
+   transform="matrix(-0.76349305,0.95712719,-0.95712719,-0.76349305,160.76475,-11.835278)"
    sodipodi:nodetypes="sccscccs" /></svg>
