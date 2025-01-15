@@ -6,11 +6,11 @@
    id="Layer_1"
    x="0px"
    y="0px"
-   viewBox="0 0 150 100"
+   viewBox="0 0 200 100"
    xml:space="preserve"
    sodipodi:docname="new_labels_indicator.svg"
    inkscape:version="1.4 (86a8ad7, 2024-10-11)"
-   width="150"
+   width="200"
    height="100"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -60,10 +60,10 @@
    inkscape:zoom="6.34"
    inkscape:cx="72.239748"
    inkscape:cy="92.507886"
-   inkscape:window-width="2160"
-   inkscape:window-height="3734"
-   inkscape:window-x="5749"
-   inkscape:window-y="-11"
+   inkscape:window-width="3840"
+   inkscape:window-height="2054"
+   inkscape:window-x="-11"
+   inkscape:window-y="244"
    inkscape:window-maximized="1"
    inkscape:current-layer="Layer_1" />
 <circle
@@ -77,9 +77,9 @@
 <path
    d="m 51.4,27.9 c 1.9,0 3.8,0.8 5,2.4 l 28.2,35.1 c 2.2,2.8 1.8,6.9 -1,9.1 -2.8,2.2 -13.953368,0.0607 -16.153368,-2.739303 L 50.94614,51.327389 C 48.74614,48.527389 44.5,31.5 47.3,29.3 c 1.2,-1 2.7,-1.4 4.1,-1.4 z"
    id="path1-8"
-   transform="matrix(0.40009714,0.31915445,-0.31915445,0.40009714,133.47299,-23.258972)"
+   transform="matrix(0.40009714,0.31915445,-0.31915445,0.40009714,187.1049,-26.818852)"
    sodipodi:nodetypes="sccscccs" /><path
    d="m 51.4,27.9 c 1.9,0 15.727389,5.25386 16.927389,6.85386 l 15.95892,21.830866 C 86.486309,59.384726 86.4,72.3 83.6,74.5 c -2.8,2.2 -6.9,1.8 -9.1,-1 L 46.3,38.4 c -2.2,-2.8 -1.8,-6.9 1,-9.1 1.2,-1 2.7,-1.4 4.1,-1.4 z"
    id="path1-8-2"
-   transform="matrix(-0.31915445,0.40009714,-0.40009714,-0.31915445,173.18694,-2.7090861)"
+   transform="matrix(-0.31915445,0.40009714,-0.40009714,-0.31915445,226.81885,-6.2689658)"
    sodipodi:nodetypes="sccscccs" /></svg>

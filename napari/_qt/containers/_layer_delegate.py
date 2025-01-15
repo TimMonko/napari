@@ -96,12 +96,28 @@ class LayerDelegate(QStyledItemDelegate):
         # update the icon based on layer type
         option.textElideMode = Qt.TextElideMode.ElideMiddle
         self.get_layer_icon(option, index)
+        self._paint_indicator(option, index)
         # paint the standard itemView (includes name, icon, and vis. checkbox)
         super().paint(painter, option, index)
         # paint loading indicator if needed
         self._paint_loading(painter, option, index)
         # paint the thumbnail
         self._paint_thumbnail(painter, option, index)
+
+        # Load the additional icon
+        additional_icon = QColoredSVGIcon.from_resources(
+            'special_menu_indicator'
+        )
+        additional_pixmap = additional_icon.pixmap(QSize(18, 18))
+
+        # Calculate the position for the additional icon
+        icon_rect = option.rect
+        icon_rect.setLeft(
+            icon_rect.right() - 18
+        )  # Adjust the position as needed
+
+        # Draw the additional icon
+        painter.drawPixmap(icon_rect, additional_pixmap)
 
     def get_layer_icon(
         self, option: QStyleOptionViewItem, index: QtCore.QModelIndex
@@ -123,11 +139,22 @@ class LayerDelegate(QStyledItemDelegate):
         # guessing theme rather than passing it through.
         bg = option.palette.color(option.palette.ColorRole.Window).red()
         option.icon = icon.colored(theme='dark' if bg < 128 else 'light')
-        option.decorationSize = QSize(27, 18)
+        option.decorationSize = QSize(36, 18)
         option.decorationPosition = (
             option.Position.Right
         )  # put icon on the right
         option.features |= option.ViewItemFeature.HasDecoration
+
+    def _paint_indicator(
+        self, option: QStyleOptionViewItem, index: QtCore.QModelIndex
+    ):
+        pass
+        # icon = QColoredSVGIcon.from_resources('special_menu_indicator')
+        # bg = option.palette.color(option.palette.ColorRole.Window).red()
+        # option.icon = icon.colored(theme='dark' if bg < 128 else 'light')
+        # option.decorationSize = QSize(18, 18)
+        # option.decorationPosition = option.Position.Right
+        # option.features |= option.ViewItemFeature.HasDecoration
 
     def _paint_loading(
         self,
