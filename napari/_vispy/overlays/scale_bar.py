@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import bisect
 from decimal import Decimal
 from math import floor, log
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pint
@@ -11,11 +14,23 @@ from napari.utils._units import PREFERRED_VALUES, get_unit_registry
 from napari.utils.colormaps.standardize_color import transform_color
 from napari.utils.theme import get_theme
 
+if TYPE_CHECKING:
+    from qtpy.QtWidgets import QWidget
+
+    from napari.components import ViewerModel
+    from napari.components.overlays.scale_bar import ScaleBarOverlay
+
 
 class VispyScaleBarOverlay(ViewerOverlayMixin, VispyCanvasOverlay):
     """Scale bar in world coordinates."""
 
-    def __init__(self, *, viewer, overlay, parent=None) -> None:
+    def __init__(
+        self,
+        *,
+        viewer: ViewerModel,
+        overlay: ScaleBarOverlay,
+        parent: QWidget | None = None,
+    ) -> None:
         self._target_length = 150.0
         self._scale = 1
         self._unit: pint.Unit

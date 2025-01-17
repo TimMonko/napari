@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from vispy.visuals.transforms import MatrixTransform, STTransform
@@ -8,6 +10,7 @@ from napari.utils.events import disconnect_events
 from napari.utils.translations import trans
 
 if TYPE_CHECKING:
+    from napari.components import ViewerModel
     from napari.layers import Layer
 
 
@@ -148,7 +151,7 @@ class VispySceneOverlay(VispyBaseOverlay):
 
 
 class LayerOverlayMixin:
-    def __init__(self, *, layer: 'Layer', overlay, node, parent=None) -> None:
+    def __init__(self, *, layer: Layer, overlay, node, parent=None) -> None:
         super().__init__(
             node=node,
             overlay=overlay,
@@ -163,7 +166,9 @@ class LayerOverlayMixin:
 
 
 class ViewerOverlayMixin:
-    def __init__(self, *, viewer, overlay, node, parent=None) -> None:
+    def __init__(
+        self, *, viewer: ViewerModel, overlay, node, parent=None
+    ) -> None:
         super().__init__(
             node=node,
             overlay=overlay,
