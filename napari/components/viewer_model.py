@@ -446,6 +446,14 @@ class ViewerModel(KeymapProvider, MousemapProvider, EventedModel):
             )
         if reset_camera_angle:
             self.camera.angles = (0, 0, 90)
+        else:
+            # adjust zoom to fit a rotated object
+            bounding_box = self._calculate_bounding_box(
+                extent, self.camera.angles
+            )
+            self.camera.zoom = scale_factor * np.min(
+                np.array(self._canvas_size) / bounding_box
+            )
 
         # Emit a reset view event, which is no longer used internally, but
         # which maybe useful for building on napari.
@@ -454,6 +462,59 @@ class ViewerModel(KeymapProvider, MousemapProvider, EventedModel):
             zoom=self.camera.zoom,
             angles=self.camera.angles,
         )
+
+    def _calculate_bounding_box(
+        self, extent: np.ndarray, angles: tuple[float, float, float]
+    ) -> np.ndarray:
+        """Calculate the bounding box of the rotated extent.
+
+        Parameters
+        ----------
+        extent : np.ndarray
+            The extent of the layers in world coordinates. The extent is
+            defined as an array with shape (2, D) where D is the number of
+            dimensions. The first row contains the minimum values of the
+            extent and the second row contains the maximum values of the
+            extent. In order of
+        angles : tuple
+            The angles of the camera.
+
+        Returns
+        -------
+        bounding_box : np.ndarray
+            The bounding box of the rotated extent.
+        """
+        from itertools import product
+
+        from scipy.spatial.transform import Rotation as R
+
+        # create a rotation object from the angles
+        rotation = R.from_euler(
+            'xyz', angles, degrees=True
+        )  # angles i ndegrees from Camera.angles
+        # get corners of the extent
+
+        # Get the corners of the extent in xyz order
+        min_vals = extent[0][::-1]  # Reverse to get xyz order
+        max_vals = extent[1][::-1]  # Reverse to get xyz order
+        corners = np.array(
+            list(product(*zip(min_vals, max_vals, strict=True)))
+        )
+
+        min_vals = extent[0]  # min values
+        max_vals = extent[1]  # max values
+        corners = np.array(
+            list(product(*zip(min_vals, max_vals, strict=True)))
+        )
+
+        # rotate the corners
+        rotated_corners = rotation.apply(corners)
+        min_corner = np.min(rotated_corners, axis=0)
+        max_corner = np.max(rotated_corners, axis=0)
+
+        # get the bounding box of y (height) and x (width)
+        bounding_box = max_corner - min_corner
+        return bounding_box[-2:]
 
     def _new_labels(self):
         """Create new labels layer filling full world coordinates space."""
