@@ -382,6 +382,188 @@ class ViewerModel(KeymapProvider, MousemapProvider, EventedModel):
             )
         return self.layers._extent_world_augmented[:, self.dims.displayed]
 
+    def _calculate_canvas_hull(
+        self, extent: np.ndarray, angles: tuple[float, float, float]
+    ) -> np.ndarray:
+        """Calculate the rotated hull of a rotated object in 3D space.
+
+        Parameters
+        ----------
+        extent : np.ndarray
+            The extent of the layers in world coordinates. The extent is
+            defined as an array with shape (2, D) where D is the number of
+            dimensions. The first row contains the minimum values of the
+            extent and the second row contains the maximum values of the
+            extent. In order of
+        angles : tuple
+            The angles of the camera. In order of (x, y, z).
+
+        Returns
+        -------
+        canvas_hull : np.ndarray
+            The bounding box of the rotated extent.
+        """
+
+        from itertools import product
+
+        from scipy.spatial.transform import Rotation as R
+
+        rotation = R.from_euler('xyz', angles, degrees=True)
+
+        # get the corners of the extent in zyx order
+        # min_vals = extent[0][::-1] # siwtch to xyz
+        # max_vals = extent[1][::-1] # switch to xyz
+        min_vals = extent[0]  # min values (maybe need to reverse with [::-1])
+        max_vals = extent[1]  # max values
+        corners = np.array(
+            list(product(*zip(min_vals, max_vals, strict=True)))
+        )
+
+        rotated_corners = rotation.apply(corners)
+        min_corner = np.min(rotated_corners, axis=0)
+        max_corner = np.max(rotated_corners, axis=0)
+
+        canvas_hull = max_corner - min_corner
+        # Determine which dimensions correspond to height and width
+        # Calculate the height and width based on the rotated bounding box
+
+        canvas_hull_height = np.linalg.norm(canvas_hull[[1, 2]])
+        canvas_hull_width = np.linalg.norm(canvas_hull[[0, 2]])
+        return np.array([canvas_hull_height, canvas_hull_width])
+
+    def _get_display_dimensions(self, extent, euler_angles):
+        """
+        TODO: read: https://github.com/elegant-scipy/notebooks/blob/c7f4cc84deaceb132cf697ae359e75ff4881590b/notebooks/ch5.ipynb
+        Compute the width and height displayed on a 2D canvas after rotating a 3D object.
+
+        Parameters:
+            shape (tuple): The (Z, Y, X) shape of the 3D object.
+            euler_angles (tuple): The (rX, rY, rZ) rotation in degrees.
+
+        Returns:
+            (width, height): The dimensions on the 2D canvas.
+        """
+        from scipy.spatial.transform import Rotation as R
+
+        # Extract dimensions (Z is depth, Y is height, X is width)
+        Z, Y, X = extent
+
+        # Define the 8 corner points of the bounding box in (X, Y, Z) format
+        corners = np.array(
+            [
+                [0, 0, 0],
+                [X, 0, 0],
+                [0, Y, 0],
+                [X, Y, 0],  # Bottom face
+                [0, 0, Z],
+                [X, 0, Z],
+                [0, Y, Z],
+                [X, Y, Z],  # Top face
+            ]
+        )
+
+        # Apply rotation using SciPy
+        rotation_matrix = R.from_euler(
+            'XYZ', euler_angles, degrees=True
+        ).as_matrix()
+        rotated_corners = corners @ rotation_matrix.T  # Rotate all points
+
+        # Project onto the 2D canvas (XY plane)
+        x_coords = rotated_corners[:, 0]
+        y_coords = rotated_corners[:, 1]
+
+        # Compute bounding box dimensions
+        width = x_coords.max() - x_coords.min()
+        height = y_coords.max() - y_coords.min()
+
+        return height, width
+
+    def get_display_dimensions(shape, euler_angles):
+        """
+        Compute the width and height displayed on a 2D canvas after rotating a 3D object.
+
+        Uses Convex Hull to compute the minimum bounding rectangle for accurate results.
+
+        Parameters:
+            shape (tuple): The (Z, Y, X) shape of the 3D object.
+            euler_angles (tuple): The (rX, rY, rZ) rotation in degrees.
+
+        Returns:
+            (width, height): The dimensions of the rotated object on the 2D canvas.
+        """
+        from scipy.spatial import ConvexHull
+        from scipy.spatial.transform import Rotation as R
+
+        Z, Y, X = shape
+
+        # Define 8 bounding box corners in (X, Y, Z)
+        corners = np.array(
+            [
+                [0, 0, 0],
+                [X, 0, 0],
+                [0, Y, 0],
+                [X, Y, 0],  # Bottom face
+                [0, 0, Z],
+                [X, 0, Z],
+                [0, Y, Z],
+                [X, Y, Z],  # Top face
+            ]
+        )
+
+        # Apply 3D rotation
+        rotation_matrix = R.from_euler(
+            'XYZ', euler_angles, degrees=True
+        ).as_matrix()
+        rotated_corners = corners @ rotation_matrix.T  # Apply rotation
+
+        # Project to 2D (XY plane)
+        points_2d = rotated_corners[:, :2]  # Keep only X and Y
+
+        # Compute Convex Hull in 2D
+        hull = ConvexHull(points_2d)
+        hull_points = points_2d[hull.vertices]
+
+        # Compute Minimum Bounding Rectangle of Convex Hull
+        def min_bounding_rect(hull_points):
+            """Finds the minimum area bounding rectangle for a set of points."""
+            edges = np.diff(
+                hull_points, axis=0, append=hull_points[:1]
+            )  # Get edges
+            angles = np.arctan2(
+                edges[:, 1], edges[:, 0]
+            )  # Compute edge angles
+            angles = np.unique(np.abs(angles))  # Only consider unique angles
+
+            min_area = float('inf')
+            best_rect = None
+
+            for angle in angles:
+                # Compute rotation matrix
+                R = np.array(
+                    [
+                        [np.cos(angle), -np.sin(angle)],
+                        [np.sin(angle), np.cos(angle)],
+                    ]
+                )
+                rot_points = (
+                    hull_points @ R
+                )  # Rotate points to align with axes
+
+                # Get min/max of rotated points
+                min_x, max_x = rot_points[:, 0].min(), rot_points[:, 0].max()
+                min_y, max_y = rot_points[:, 1].min(), rot_points[:, 1].max()
+
+                area = (max_x - min_x) * (max_y - min_y)
+                if area < min_area:
+                    min_area = area
+                    best_rect = (max_x - min_x, max_y - min_y)
+
+            return best_rect
+
+        width, height = min_bounding_rect(hull_points)
+
+        return height, width
+
     def reset_view(
         self, *, margin: float = 0.05, reset_camera_angle: bool = True
     ) -> None:
@@ -448,9 +630,18 @@ class ViewerModel(KeymapProvider, MousemapProvider, EventedModel):
             self.camera.angles = (0, 0, 90)
         else:
             # adjust zoom to fit a rotated object
-            bounding_box = self._calculate_bounding_box(
-                extent, self.camera.angles
+            bounding_box = self._calculate_canvas_hull(
+                extent,
+                self.camera.angles,
             )
+            bounding_box = self.get_display_dimensions(
+                scene_size, self.camera.angles
+            )
+
+            bounding_box = self._get_display_dimensions(
+                scene_size, self.camera.angles
+            )
+
             self.camera.zoom = scale_factor * np.min(
                 np.array(self._canvas_size) / bounding_box
             )
@@ -462,59 +653,6 @@ class ViewerModel(KeymapProvider, MousemapProvider, EventedModel):
             zoom=self.camera.zoom,
             angles=self.camera.angles,
         )
-
-    def _calculate_bounding_box(
-        self, extent: np.ndarray, angles: tuple[float, float, float]
-    ) -> np.ndarray:
-        """Calculate the bounding box of the rotated extent.
-
-        Parameters
-        ----------
-        extent : np.ndarray
-            The extent of the layers in world coordinates. The extent is
-            defined as an array with shape (2, D) where D is the number of
-            dimensions. The first row contains the minimum values of the
-            extent and the second row contains the maximum values of the
-            extent. In order of
-        angles : tuple
-            The angles of the camera.
-
-        Returns
-        -------
-        bounding_box : np.ndarray
-            The bounding box of the rotated extent.
-        """
-        from itertools import product
-
-        from scipy.spatial.transform import Rotation as R
-
-        # create a rotation object from the angles
-        rotation = R.from_euler(
-            'xyz', angles, degrees=True
-        )  # angles i ndegrees from Camera.angles
-        # get corners of the extent
-
-        # Get the corners of the extent in xyz order
-        min_vals = extent[0][::-1]  # Reverse to get xyz order
-        max_vals = extent[1][::-1]  # Reverse to get xyz order
-        corners = np.array(
-            list(product(*zip(min_vals, max_vals, strict=True)))
-        )
-
-        min_vals = extent[0]  # min values
-        max_vals = extent[1]  # max values
-        corners = np.array(
-            list(product(*zip(min_vals, max_vals, strict=True)))
-        )
-
-        # rotate the corners
-        rotated_corners = rotation.apply(corners)
-        min_corner = np.min(rotated_corners, axis=0)
-        max_corner = np.max(rotated_corners, axis=0)
-
-        # get the bounding box of y (height) and x (width)
-        bounding_box = max_corner - min_corner
-        return bounding_box[-2:]
 
     def _new_labels(self):
         """Create new labels layer filling full world coordinates space."""
