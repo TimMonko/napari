@@ -10,6 +10,7 @@ Basic example of using magicgui to create an Image Arithmetic GUI in napari.
 import enum
 
 import numpy as np
+from magicgui import magicgui
 
 import napari
 
@@ -34,6 +35,7 @@ class Operation(enum.Enum):
 # Note: here we use `napari.types.ImageData` as our parameter annotations,
 # which means our function will be passed layer.data instead of
 # the full layer instance
+@magicgui
 def image_arithmetic(
     layerA: 'napari.types.ImageData',
     operation: Operation,
@@ -48,11 +50,23 @@ def image_arithmetic(
 # create a new viewer with a couple image layers
 # Since the input layers have been scaled, the resulting returned layer will inherit the same scale value.
 viewer = napari.Viewer()
-viewer.add_image(np.random.rand(20, 20), name='Layer 1', scale=(2, 2))
-viewer.add_image(np.random.rand(20, 20), name='Layer 2', scale=(2, 2))
+viewer.grid.enabled = True
+viewer.add_image(
+    np.random.rand(20, 20), name='Layer 1', scale=(1, 2), colormap='magenta'
+)
+viewer.add_image(
+    np.random.rand(20, 20), name='Layer 2', scale=(1, 2), colormap='green'
+)
 
 # Add our magic function to napari
-viewer.window.add_function_widget(image_arithmetic)
+viewer.window.add_dock_widget(image_arithmetic)
+
+# Show how calling the function will result in properly inheriting the scale value.
+image_arithmetic(
+    layerA=viewer.layers['Layer 1'].data,
+    operation=Operation.divide,
+    layerB=viewer.layers['Layer 2'].data
+)
 
 if __name__ == '__main__':
     napari.run()
