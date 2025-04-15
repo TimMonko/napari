@@ -1702,9 +1702,11 @@ class Window:
             extent, _, _, total_size = (
                 self._qt_viewer.viewer._get_scene_parameters()
             )
+            print(f'total_size: {total_size}')
 
             if ndisplay == 2:
                 size = np.array(total_size[-ndisplay:]).astype(int)
+                print(f'canvas size: {size}')
 
             if ndisplay == 3:
                 size = self._qt_viewer.viewer._calculate_bounding_box(
@@ -1715,8 +1717,10 @@ class Window:
 
         if size is not None:
             size = np.asarray(size) / self._qt_window.devicePixelRatio()
+            print(f'canvas size scaled: {size}')
         else:
             size = np.asarray(prev_size)
+            print(f'canvas size prev: {size}')
 
         if scale is not None:
             # multiply canvas dimensions by the scale factor to get new size
@@ -1725,6 +1729,7 @@ class Window:
         # Part 3: take the screenshot
         if canvas_only:
             canvas.size = tuple(size.astype(int))
+            print(f'canvas size set: {canvas.size}')
             if fit_to_data_extent:
                 # tight view around data
                 self._qt_viewer.viewer.fit_to_view(margin=0)
