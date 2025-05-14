@@ -85,7 +85,7 @@ layer.add(
 )
 
 # create a rectangle
-rectangle = np.array([[200, 200], [300, 200], [300, 300], [200, 300]])
+rectangle = np.array([[-100, 200], [300, 200], [300, 300], [-100, 300]])
 # add the rectangle to the viewer
 layer.add(
     rectangle,
@@ -98,7 +98,7 @@ layer.add(
 # create a rotated rectangle
 rotated_rectangle = np.array(
     [
-        [ 64.75069, 353.22742],
+        [-64.75069, 353.22742],
         [137.60655, 284.7292 ],
         [206.105  , 357.5849 ],
         [133.24908, 426.08325]
@@ -113,9 +113,52 @@ layer.add(
     face_color='green',
 )
 
+
+def inbounds_shape_shift(verts, image_shape):
+    """
+    Calculate the shift needed to move the entire shape within image bounds.
+
+    Parameters
+    ----------
+    verts : (N, 2) np.ndarray
+        Array of vertices (Y, X) for the shape.
+    image_shape : tuple of int
+        (height, width) of the image.
+
+    Returns
+    -------
+    shift : np.ndarray, shape (2,)
+        The [shift_y, shift_x] needed to bring the shape fully into bounds.
+    """
+    # Find the minimum and maximum Y and X coordinates of the shape
+    min_y, min_x = verts.min(axis=0)
+    max_y, max_x = verts.max(axis=0)
+
+    # Initialize shift values for Y and X
+    shift_y = 0
+    shift_x = 0
+
+    # If any part of the shape is above the top edge, shift down
+    if min_y < 0:
+        shift_y = -min_y
+    # If any part of the shape is below the bottom edge, shift up
+    elif max_y >= image_shape[0]:
+        shift_y = image_shape[0] - 1 - max_y
+
+    # If any part of the shape is left of the left edge, shift right
+    if min_x < 0:
+        shift_x = -min_x
+    # If any part of the shape is right of the right edge, shift left
+    elif max_x >= image_shape[1]:
+        shift_x = image_shape[1] - 1 - max_x
+
+    # Return the shift as a numpy array
+    return np.array([shift_y, shift_x])
+
 # get all the bounding boxes of the shapes
+image_shape = viewer.layers['photographer'].data.shape
 bboxes = []
-for shape in layer._data_view.shapes:
+for i, shape in enumerate(layer._data_view.shapes):
     bboxes.append(shape._bounding_box)
 
     if shape.name != 'rectangle':
@@ -132,10 +175,28 @@ for shape in layer._data_view.shapes:
     ])
     # Check if each vertex matches (within tolerance) any bbox corner
     matches = [np.any(np.all(np.isclose(v, bbox_corners), axis=1)) for v in verts]
+
     if all(matches):
         print('axis-aligned rectangle')
     else:
         print('rotated rectangle')
+
+    in_bounds = np.all(
+        (verts[:, 0] >= 0) & (verts[:, 0] < image_shape[1]) &
+        (verts[:, 1] >= 0) & (verts[:, 1] < image_shape[0])
+    )
+
+    if in_bounds:
+        print('all vertices in bounds')
+    if not in_bounds:
+        print('some vertices out of bounds, sliding back into bounds')
+        print('original vertices:', verts)
+        shift = inbounds_shape_shift(verts, image_shape)
+        layer._data_view.shift(i, shift)
+        print('shifted vertices:', verts)
+
+
+
 
 
 # add the bounding boxes to a new shapes layer
