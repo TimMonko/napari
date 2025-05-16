@@ -288,6 +288,16 @@ class QtLabelsControls(QtLayerControls):
             trans._('show\nselected:'), self.selectedColorCheckbox
         )
 
+        self.numColorsSpinBox = QSpinBox()
+        self.numColorsSpinBox.setMinimum(2)
+        self.numColorsSpinBox.setMaximum(1024)
+        self.numColorsSpinBox.setValue(self.layer.num_colors)
+        self.numColorsSpinBox.setToolTip(
+            trans._('Number of unique colors in the colormap')
+        )
+        self.numColorsSpinBox.valueChanged.connect(self.change_num_colors)
+        self.layout().addRow(trans._('num colors:'), self.numColorsSpinBox)
+
     def change_color_mode(self):
         """Change color mode of label layer"""
         if self.colorModeComboBox.currentData() == LabelColorMode.AUTO.value:
@@ -452,6 +462,10 @@ class QtLabelsControls(QtLayerControls):
         self.layer.preserve_labels = (
             Qt.CheckState(state) == Qt.CheckState.Checked
         )
+
+    def change_num_colors(self, value):
+        """Change the number of unique colors in the colormap."""
+        self.layer.num_colors = value
 
     def _on_contour_change(self):
         """Receive layer model contour value change event and update spinbox."""

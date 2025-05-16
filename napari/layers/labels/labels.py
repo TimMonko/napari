@@ -320,15 +320,15 @@ class Labels(ScalarFieldBase):
         translate=None,
         units=None,
         visible=True,
+        num_colors=49,
     ) -> None:
         if name is None and data is not None:
             name = magic_name(data)
 
         self._seed = 0.5
-        # We use 50 colors (49 + transparency) by default for historical
-        # consistency. This may change in future versions.
+        self._num_colors = num_colors
         self._random_colormap = label_colormap(
-            49, self._seed, background_value=0
+            self._num_colors, self._seed, background_value=0
         )
         self._original_random_colormap = self._random_colormap
         self._direct_colormap = direct_colormap(
@@ -1599,6 +1599,24 @@ class Labels(ScalarFieldBase):
             and v[idx] is not None
             and not (isinstance(v[idx], float) and np.isnan(v[idx]))
         ]
+
+    @property
+    def num_colors(self):
+        """int: Number of unique colors in the colormap."""
+        return self._num_colors
+
+    @num_colors.setter
+    def num_colors(self, value):
+        if value != self._num_colors:
+            self._num_colors = int(value)
+            # Regenerate the random colormap with the new number of colors
+            self._random_colormap = label_colormap(
+                self._num_colors, self._seed, background_value=0
+            )
+            self._original_random_colormap = self._random_colormap
+            # If using AUTO mode, update the colormap
+            if self._color_mode == LabelColorMode.AUTO:
+                self.colormap = self._random_colormap
 
 
 def _coerce_indices_for_vectorization(array, indices: list) -> tuple:
