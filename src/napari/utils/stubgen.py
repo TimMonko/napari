@@ -25,6 +25,7 @@ callable methods will be stubbed.
 
 import importlib
 import inspect
+import os
 import subprocess
 import textwrap
 import typing
@@ -186,8 +187,9 @@ def generate_module_stub(module: str | ModuleType, save=True) -> str:
         file_path = module.__file__.replace('.py', '.pyi')
         with open(file_path, 'w') as f:
             f.write(pyi)
-        subprocess.run(['ruff', 'format', file_path])
-        subprocess.run(['ruff', 'check', file_path])
+        file_path_absolute = os.path.abspath(file_path)
+        subprocess.run(['ruff', 'format', file_path_absolute])
+        subprocess.run(['ruff', 'check', file_path_absolute])
 
     return pyi
 
