@@ -1,6 +1,8 @@
 import functools
 import inspect
 
+import pytest
+
 from napari.utils.naming import (
     inc_name_count,
     magic_name,
@@ -95,7 +97,12 @@ def test_assignment():
     assert result == 'd'
 
 
-def test_path_prefix():
+@pytest.fixture
+def temp_py_file(tmp_path):
+    return tmp_path / 'temp_test_file.py'
+
+
+def test_path_prefix(temp_py_file):
     """Test that path prefixes work as expected."""
     mname = functools.partial(magic_name, path_prefix=__file__)
 
@@ -105,15 +112,15 @@ def test_path_prefix():
 
         return bar(x)
 
-    assert eval_with_filename('foo(42)', 'hi.py') is None
+    assert eval_with_filename('foo(42)', str(temp_py_file)) is None
 
     r = 8  # noqa
-    assert eval_with_filename('foo(r)', 'bye.py') == 'r'
+    assert eval_with_filename('foo(r)', str(temp_py_file)) == 'r'
 
-    assert eval_with_filename('foo(i:=33)', 'rye.py') == 'i'
+    assert eval_with_filename('foo(i:=33)', str(temp_py_file)) == 'i'
 
 
-def test_empty_path_prefix():
+def test_empty_path_prefix(temp_py_file):
     """Test an empty path prefix that matches the entire stack"""
     # Repeat tests with an empty path_prefix
     mname = functools.partial(magic_name, path_prefix='')
@@ -124,11 +131,11 @@ def test_empty_path_prefix():
 
         return bar(x)
 
-    # Test are all None because the path_prefix matches everything
+    # Tests are all None because the path_prefix matches everything
     # magic_name reads through until the end of the stack
-    assert eval_with_filename('foo(42)', 'hi.py') is None
+    assert eval_with_filename('foo(42)', str(temp_py_file)) is None
 
     r = 8  # noqa
-    assert eval_with_filename('foo(r)', 'bye.py') is None
+    assert eval_with_filename('foo(r)', str(temp_py_file)) is None
 
-    assert eval_with_filename('foo(i:=33)', 'rye.py') is None
+    assert eval_with_filename('foo(i:=33)', str(temp_py_file)) is None

@@ -398,8 +398,8 @@ console_output_style = "count"
 minversion = "8"
 # log_cli_level = "INFO"
 xfail_strict = true
-testpaths = ["napari", "napari_builtins"]
-#pythonpath = "src"
+testpaths = ["src/napari", "src/napari_builtins"]
+pythonpath = "src"
 
 
 # NOTE: only put things that will never change in here.
@@ -840,12 +840,10 @@ omit = [
     "*/benchmarks/*",
     "napari/utils/indexing.py",
     "**/add_layer.py_tmpl",
-    "bye.py",
-    "hi.py",
 ]
 source = [
-    "napari",
-    "napari_builtins",
+    "src/napari",
+    "src/napari_builtins",
 ]
 
 [tool.coverage.paths]
