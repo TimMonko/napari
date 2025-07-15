@@ -2,8 +2,8 @@
 """
 Script to check which GitHub contributors are missing from CITATION.cff
 
-This script compares the contributors in the GitHub repository with those
-listed in the CITATION.cff file to identify missing contributors.
+This script compares the contributors in the GitHub repositories (napari/napari and napari/docs)
+with those listed in the CITATION.cff file to identify missing contributors.
 
 Requirements:
 - requests library for GitHub API calls
@@ -15,6 +15,31 @@ Usage:
 
 Environment Variables:
     GITHUB_TOKEN: GitHub personal access token (optional, but recommended to avoid rate limits)
+
+(Optional but recommended) Set up a GitHub personal access token to avoid rate limits:
+   - Go to https://github.com/settings/tokens
+   - Generate a new token with "repo" permissions
+   - Set the environment variable:
+     ```bash
+     # On Windows (cmd)
+     set GITHUB_TOKEN=your_token_here
+
+     # On Windows (PowerShell)
+     $env:GITHUB_TOKEN = "your_token_here"
+
+     # On Linux/Mac
+     export GITHUB_TOKEN=your_token_here
+     ```
+
+## Output
+
+The script will show:
+- Total number of GitHub contributors vs. aliases in CITATION.cff
+- List of missing contributors (sorted by contribution count)
+- Repository information for each contributor
+- Any obsolete aliases (in CITATION.cff but not in current GitHub contributors)
+- A summary list of usernames for easy reference
+
 """
 
 import os
@@ -22,7 +47,7 @@ import sys
 import requests
 import yaml
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 @dataclass
@@ -31,6 +56,8 @@ class Contributor:
     login: str
     contributions: int
     type: str  # 'User' or 'Bot'
+    repo: str = ""  # Repository name
+    repos: list[str] = field(default_factory=list)  # List of repositories they contributed to
 
 class GitHubContributorFetcher:
     """Fetches contributors from GitHub API"""
@@ -141,7 +168,7 @@ def main():
     
     # Configuration
     REPO_OWNER = "napari"
-    REPO_NAME = "napari"
+    REPOSITORIES = ["napari", "docs"]  # List of repositories to check
     CITATION_FILE = Path("CITATION.cff")
     
     # Get GitHub token from environment (optional but recommended)
@@ -156,12 +183,40 @@ def main():
     parser = CitationParser(CITATION_FILE)
     existing_aliases = parser.get_existing_aliases()
     
-    # Fetch contributors from GitHub
-    fetcher = GitHubContributorFetcher(REPO_OWNER, REPO_NAME, github_token)
-    contributors = fetcher.get_contributors()
+    # Fetch contributors from all repositories
+    all_contributors = []
+    all_github_usernames = set()
+    
+    for repo_name in REPOSITORIES:
+        print(f"\n{'='*60}")
+        print(f"Processing repository: {REPO_OWNER}/{repo_name}")
+        print(f"{'='*60}")
+        
+        fetcher = GitHubContributorFetcher(REPO_OWNER, repo_name, github_token)
+        repo_contributors = fetcher.get_contributors()
+        
+        # Add repository info to contributors
+        for contrib in repo_contributors:
+            contrib.repo = repo_name
+        
+        all_contributors.extend(repo_contributors)
+        all_github_usernames.update(contrib.login for contrib in repo_contributors)
+    
+    # Remove duplicates while preserving contribution counts across repos
+    unique_contributors = {}
+    for contrib in all_contributors:
+        if contrib.login not in unique_contributors:
+            unique_contributors[contrib.login] = contrib
+            unique_contributors[contrib.login].repos = [contrib.repo]
+        else:
+            unique_contributors[contrib.login].contributions += contrib.contributions
+            if contrib.repo not in unique_contributors[contrib.login].repos:
+                unique_contributors[contrib.login].repos.append(contrib.repo)
+    
+    contributors = list(unique_contributors.values())
     
     # Get set of GitHub usernames
-    github_usernames = {contrib.login for contrib in contributors}
+    github_usernames = all_github_usernames
     
     # Find missing contributors
     missing_contributors = github_usernames - existing_aliases
@@ -181,7 +236,8 @@ def main():
     print("CITATION.CFF CONTRIBUTOR ANALYSIS")
     print("="*80)
 
-    print(f"\nTotal GitHub contributors: {len(github_usernames)}")
+    print(f"\nRepositories analyzed: {', '.join(REPOSITORIES)}")
+    print(f"Total unique GitHub contributors: {len(all_github_usernames)}")
     print(f"Total aliases in CITATION.cff: {len(existing_aliases)}")
     print(f"Missing from CITATION.cff: {len(missing_contributors)}")
     print(f"Obsolete aliases: {len(obsolete_aliases)}")
@@ -190,7 +246,8 @@ def main():
         print(f"\n🔍 MISSING CONTRIBUTORS ({len(missing_contributors)}):")
         print("-" * 50)
         for contrib in missing_contributors_with_counts:
-            print(f"  {contrib.login:<30} ({contrib.contributions} contributions)")
+            repo_info = f" (repos: {', '.join(contrib.repos)})" if len(contrib.repos) > 1 else f" (repo: {contrib.repos[0]})"
+            print(f"  {contrib.login:<30} ({contrib.contributions} contributions{repo_info})")
     else:
         print("\n✅ All GitHub contributors are included in CITATION.cff!")
     
@@ -203,13 +260,13 @@ def main():
     
     # Generate a summary for easy copy-paste
     if missing_contributors:
-        print(f"\n📋 SUMMARY FOR QUICK REFERENCE:")
+        print("\n📋 SUMMARY FOR QUICK REFERENCE:")
         print("-" * 50)
         print("Missing GitHub usernames (sorted by contribution count):")
         usernames_only = [contrib.login for contrib in missing_contributors_with_counts]
         print(", ".join(usernames_only))
     
-    print(f"\n💡 To add missing contributors, you'll need to:")
+    print("\n💡 To add missing contributors, you'll need to:")
     print("1. Look up their real names and affiliations")
     print("2. Add them to the authors section in CITATION.cff")
     print("3. Include their GitHub username in the 'alias' field")
