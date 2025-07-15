@@ -34,13 +34,13 @@ class Contributor:
 
 class GitHubContributorFetcher:
     """Fetches contributors from GitHub API"""
-    
+
     def __init__(self, repo_owner: str, repo_name: str, token: Optional[str] = None):
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.token = token
         self.base_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}"
-        
+
         # Set up headers with authentication if token provided
         self.headers = {
             'Accept': 'application/vnd.github.v3+json',
