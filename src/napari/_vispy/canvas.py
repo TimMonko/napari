@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import gc
+import warnings
 from functools import partial
 from typing import TYPE_CHECKING
 from weakref import WeakSet
@@ -48,8 +51,6 @@ if TYPE_CHECKING:
     from napari.utils.key_bindings import KeymapHandler
 
 
-import warnings
-
 from napari.utils.translations import trans
 
 
@@ -63,6 +64,34 @@ class NapariSceneCanvas(SceneCanvas_):
         if event.handled:
             return
         super()._process_mouse_event(event)
+
+    def _draw_scene(self, bgcolor=None):
+        """Override _draw_scene to add Windows access violation protection."""
+        try:
+            # Call the original _draw_scene method
+            super()._draw_scene(bgcolor)
+
+        except OSError as e:
+            if 'access violation' in str(e):
+                warnings.warn(
+                    'OpenGL access violation intercepted in _draw_scene'
+                )
+                # Try to clear any pending GL errors
+                try:
+                    if hasattr(self, 'context') and self.context is not None:
+                        while (
+                            self.context.glGetError()
+                            != self.context.gl.GL_NO_ERROR
+                        ):
+                            pass
+                except (OSError, AttributeError):
+                    pass
+                return
+            raise
+        except Exception as e:
+            # Log other drawing errors but don't crash
+            warnings.warn(f'Drawing error in _draw_scene: {e}')
+            raise
 
 
 class VispyCanvas:
@@ -605,39 +634,56 @@ class VispyCanvas:
         -------
         None
         """
-        # this updates camera zooms and overlay positions if necessary
-        # (usually after grid mode enable when viewboxes are still degenerate)
-        if not np.allclose(
-            self._last_viewbox_size, self._current_viewbox_size
-        ):
-            self._update_grid_spacing()
-            self._update_overlay_canvas_positions()
-            self._last_viewbox_size = self._current_viewbox_size
+        try:
+            # Only validate context if we've had issues before
+            if (
+                hasattr(self, '_gl_context_suspect')
+                and not self._validate_gl_context()
+            ):
+                return
 
-        # sync all cameras
-        for camera in (self.camera, *self.grid_cameras):
-            camera.on_draw(event)
+            # this updates camera zooms and overlay positions if necessary
+            # (usually after grid mode enable when viewboxes are still degenerate)
+            if not np.allclose(
+                self._last_viewbox_size, self._current_viewbox_size
+            ):
+                self._update_grid_spacing()
+                self._update_overlay_canvas_positions()
+                self._last_viewbox_size = self._current_viewbox_size
 
-        # The canvas corners in full world coordinates (i.e. across all layers).
-        viewbox_corners_world = self._viewbox_corners_in_world
-        for layer in self.viewer.layers:
-            # The following condition should mostly be False. One case when it can
-            # be True is when a callback connected to self.viewer.dims.events.ndisplay
-            # is executed before layer._slice_input has been updated by another callback
-            # (e.g. when changing self.viewer.dims.ndisplay from 3 to 2).
-            displayed_sorted = sorted(layer._slice_input.displayed)
-            nd = len(displayed_sorted)
-            if nd > self.viewer.dims.ndisplay:
-                displayed_axes = displayed_sorted
-            else:
-                displayed_axes = list(self.viewer.dims.displayed[-nd:])
-            layer._update_draw(
-                scale_factor=1 / self.viewer.camera.zoom,
-                corner_pixels_displayed=viewbox_corners_world[
-                    :, displayed_axes
-                ],
-                shape_threshold=self._current_viewbox_size[::-1],
-            )
+            # sync all cameras
+            for camera in (self.camera, *self.grid_cameras):
+                camera.on_draw(event)
+
+            # The canvas corners in full world coordinates (i.e. across all layers).
+            viewbox_corners_world = self._viewbox_corners_in_world
+            for layer in self.viewer.layers:
+                # The following condition should mostly be False. One case when it can
+                # be True is when a callback connected to self.viewer.dims.events.ndisplay
+                # is executed before layer._slice_input has been updated by another callback
+                # (e.g. when changing self.viewer.dims.ndisplay from 3 to 2).
+                displayed_sorted = sorted(layer._slice_input.displayed)
+                nd = len(displayed_sorted)
+                if nd > self.viewer.dims.ndisplay:
+                    displayed_axes = displayed_sorted
+                else:
+                    displayed_axes = list(self.viewer.dims.displayed[-nd:])
+                layer._update_draw(
+                    scale_factor=1 / self.viewer.camera.zoom,
+                    corner_pixels_displayed=viewbox_corners_world[
+                        :, displayed_axes
+                    ],
+                    shape_threshold=self._current_viewbox_size[::-1],
+                )
+        except OSError as e:
+            if 'access violation' in str(e):
+                warnings.warn(
+                    'OpenGL access violation detected, attempting recovery'
+                )
+                self._mark_gl_context_suspect()
+                self._handle_gl_error_recovery()
+                return
+            raise
 
     def on_resize(self, event: ResizeEvent) -> None:
         """Called whenever canvas is resized.
@@ -703,19 +749,56 @@ class VispyCanvas:
         None
         """
         layer = event.value
-        disconnect_events(layer.events, self)
-        disconnect_events(layer.events, self._overlay_callbacks[layer])
-        disconnect_events(
-            layer._overlays.events, self._overlay_callbacks[layer]
-        )
-        del self._overlay_callbacks[layer]
-        vispy_layer = self.layer_to_visual.pop(layer)
-        disconnect_events(self.viewer.camera.events, vispy_layer)
-        vispy_layer.close()
-        del vispy_layer
-        self._remove_layer_overlays(layer)
-        del self._layer_overlay_to_visual[layer]
-        self._update_scenegraph()
+        try:
+            # Force a draw to ensure pending operations complete
+            if (
+                hasattr(self, '_scene_canvas')
+                and self._scene_canvas is not None
+            ):
+                try:
+                    # Attempt to flush any pending operations
+                    if hasattr(self._scene_canvas, 'context'):
+                        self._scene_canvas.context.flush_commands()
+                except (OSError, AttributeError):
+                    # Ignore errors during context flush
+                    pass
+
+            disconnect_events(layer.events, self)
+            disconnect_events(layer.events, self._overlay_callbacks[layer])
+            disconnect_events(
+                layer._overlays.events, self._overlay_callbacks[layer]
+            )
+            del self._overlay_callbacks[layer]
+
+            vispy_layer = self.layer_to_visual.pop(layer, None)
+
+            if vispy_layer is not None:
+                # Ensure the visual is properly detached from scene
+                if hasattr(vispy_layer, 'node') and hasattr(
+                    vispy_layer.node, 'parent'
+                ):
+                    vispy_layer.node.parent = None
+
+                # Force OpenGL to finish pending operations
+                if hasattr(self._scene_canvas, 'context'):
+                    with contextlib.suppress(OSError, AttributeError):
+                        self._scene_canvas.context.finish()
+
+                disconnect_events(self.viewer.camera.events, vispy_layer)
+                vispy_layer.close()
+                del vispy_layer
+
+            self._remove_layer_overlays(layer)
+            if layer in self._layer_overlay_to_visual:
+                del self._layer_overlay_to_visual[layer]
+
+            # Force garbage collection to ensure cleanup
+            gc.collect()
+
+        except (OSError, RuntimeError, AttributeError) as e:
+            warnings.warn(f'Error during layer removal: {e}')
+        finally:
+            self._update_scenegraph()
 
     def _reorder_layers(self) -> None:
         """When the list is reordered, propagate changes to draw order."""
@@ -1025,3 +1108,63 @@ class VispyCanvas:
             self.viewer.grid.spacing = safe_spacing
 
         self.grid.spacing = safe_spacing
+
+    def _validate_gl_context(self) -> bool:
+        """Validate that the OpenGL context is still valid.
+
+        Returns
+        -------
+        bool
+            True if the OpenGL context is valid, False otherwise.
+        """
+        try:
+            # Basic checks - if these fail, we definitely can't draw
+            if (
+                not hasattr(self, '_scene_canvas')
+                or self._scene_canvas is None
+            ):
+                return False
+            context = getattr(self._scene_canvas, 'context', None)
+            if context is None:
+                return False
+
+            # Only do expensive validation if we've seen access violations before
+            # For normal operation, assume context is valid
+            if not hasattr(self, '_gl_context_suspect'):
+                return True
+
+            # If we suspect the context might be bad, do a more thorough check
+            if hasattr(context, 'shared') and hasattr(
+                context.shared, 'parser'
+            ):
+                try:
+                    # Try a simple GL operation
+                    context.glGetString(context.gl.GL_VERSION)
+                except (OSError, AttributeError, RuntimeError):
+                    return False
+                else:
+                    return True
+            else:
+                return True
+        except (OSError, AttributeError, RuntimeError):
+            # If validation itself fails, assume context is valid to avoid blocking normal operation
+            return True
+
+    def _mark_gl_context_suspect(self):
+        """Mark the GL context as potentially problematic."""
+        self._gl_context_suspect = True
+
+    def _handle_gl_error_recovery(self):
+        """Attempt to recover from OpenGL errors."""
+        try:
+            # Clear any pending OpenGL errors
+            if hasattr(self._scene_canvas, 'context'):
+                context = self._scene_canvas.context
+                while context.glGetError() != context.gl.GL_NO_ERROR:
+                    pass
+
+            # Force a complete redraw
+            self._update_scenegraph()
+
+        except (OSError, AttributeError, RuntimeError) as e:
+            warnings.warn(f'Failed to recover from OpenGL error: {e}')
