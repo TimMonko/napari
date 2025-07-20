@@ -301,9 +301,9 @@ class VispyBaseLayer(ABC, Generic[_L]):
                         self.node.parent = None
 
                     # Clear any visual data that might hold OpenGL resources
-                    if hasattr(self.node, 'set_data'):
-                        with contextlib.suppress(AttributeError, OSError):
-                            self.node.set_data(None)
+                    # NOTE: We don't call set_data(None) as some visuals (ImageVisual)
+                    # don't handle None properly and cause TypeError. Instead, we rely
+                    # on proper scene graph detachment and resource manager cleanup.
 
                     # If this is a compound visual, clean up subvisuals
                     if hasattr(self.node, '_subvisuals'):
@@ -314,8 +314,8 @@ class VispyBaseLayer(ABC, Generic[_L]):
                                 ):
                                     if hasattr(subvisual, 'parent'):
                                         subvisual.parent = None
-                                    if hasattr(subvisual, 'set_data'):
-                                        subvisual.set_data(None)
+                                    # Don't call set_data(None) on subvisuals either
+                                    # as it can cause TypeErrors with some visual types
 
                     # Reset transforms after detachment to avoid holding references
                     with contextlib.suppress(AttributeError, OSError):
