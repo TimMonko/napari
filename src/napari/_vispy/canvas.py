@@ -6,7 +6,7 @@ import contextlib
 import gc
 import warnings
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from weakref import WeakSet
 
 import numpy as np
@@ -17,6 +17,9 @@ from napari._vispy.camera import VispyCamera
 from napari._vispy.mouse_event import NapariMouseEvent
 from napari._vispy.utils.cursor import QtCursorVisual
 from napari._vispy.utils.gl import get_max_texture_sizes
+from napari._vispy.utils.shared_resource_manager import (
+    get_shared_resource_manager,
+)
 from napari._vispy.utils.visual import create_vispy_overlay
 from napari.components._viewer_constants import CanvasPosition
 from napari.components.overlays import CanvasOverlay
@@ -57,6 +60,24 @@ from napari.utils.translations import trans
 class NapariSceneCanvas(SceneCanvas_):
     """Vispy SceneCanvas used to allow for ignoring mouse wheel events with modifiers."""
 
+    # Class-level dictionary to track access violation state for each canvas instance
+    _access_violation_state = {}  # noqa
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize access violation tracking for this instance
+        self._access_violation_state[id(self)] = {
+            'count': 0,
+            'last_time': 0,
+            'threshold': 3,
+            'cooldown': 2.0,  # seconds
+        }
+
+    def __del__(self):
+        """Clean up access violation state when the instance is destroyed."""
+        instance_id = id(self)
+        self._access_violation_state.pop(instance_id, None)
+
     def _process_mouse_event(self, event: MouseEvent):
         """Ignore mouse wheel events which have modifiers."""
         if event.type == 'mouse_wheel' and len(event.modifiers) > 0:
@@ -67,31 +88,261 @@ class NapariSceneCanvas(SceneCanvas_):
 
     def _draw_scene(self, bgcolor=None):
         """Override _draw_scene to add Windows access violation protection."""
+        import time
+
+        current_time = time.time()
+        instance_id = id(self)
+        state = self._access_violation_state.get(
+            instance_id,
+            {
+                'count': 0,
+                'last_time': 0,
+                'threshold': 2,  # Reduced threshold to enter recovery mode faster
+                'cooldown': 5.0,  # Longer cooldown to allow complete recovery
+                'degraded_mode': False,  # Track if we're in degraded rendering mode
+                'recovery_attempts': 0,
+                'max_recovery_attempts': 2,
+            },
+        )
+
+        # If we're in degraded mode, try recovery
+        if state.get('degraded_mode', False):
+            time_since_last = current_time - state['last_time']
+            if time_since_last > state['cooldown']:
+                # Attempt recovery
+                if state['recovery_attempts'] < state['max_recovery_attempts']:
+                    state['recovery_attempts'] += 1
+                    warnings.warn(
+                        f'Attempting OpenGL recovery (attempt {state["recovery_attempts"]}/{state["max_recovery_attempts"]})'
+                    )
+                    if self._attempt_comprehensive_recovery():
+                        # Recovery successful, reset state
+                        state['degraded_mode'] = False
+                        state['count'] = 0
+                        state['recovery_attempts'] = 0
+                        self._access_violation_state[instance_id] = state
+                        warnings.warn(
+                            'OpenGL recovery successful - resuming normal rendering'
+                        )
+                    else:
+                        # Recovery failed, extend cooldown
+                        state['last_time'] = current_time
+                        state['cooldown'] *= 1.2  # Exponential backoff
+                        self._access_violation_state[instance_id] = state
+                        self._draw_degraded_canvas(bgcolor)
+                        return
+                else:
+                    # Max recovery attempts reached, show permanent degraded state
+                    self._draw_degraded_canvas(bgcolor, permanent=True)
+                    return
+            else:
+                # Still in cooldown, show degraded canvas
+                self._draw_degraded_canvas(bgcolor)
+                return
+
+        # Reset access violation count if enough time has passed and not in degraded mode
+        if (
+            not state.get('degraded_mode', False)
+            and current_time - state['last_time'] > 15.0
+        ):
+            state['count'] = 0
+            self._access_violation_state[instance_id] = state
+
         try:
             # Call the original _draw_scene method
             super()._draw_scene(bgcolor)
+            # If we successfully draw, reset the access violation count
+            if not state.get('degraded_mode', False):
+                state['count'] = 0
+                self._access_violation_state[instance_id] = state
 
         except OSError as e:
             if 'access violation' in str(e):
-                warnings.warn(
-                    'OpenGL access violation intercepted in _draw_scene'
-                )
-                # Try to clear any pending GL errors
-                try:
-                    if hasattr(self, 'context') and self.context is not None:
-                        while (
-                            self.context.glGetError()
-                            != self.context.gl.GL_NO_ERROR
-                        ):
-                            pass
-                except (OSError, AttributeError):
-                    pass
+                state['count'] += 1
+                state['last_time'] = current_time
+
+                # Check if we should enter degraded mode
+                if state['count'] >= state['threshold']:
+                    state['degraded_mode'] = True
+                    warnings.warn(
+                        'OpenGL access violations exceeded threshold. '
+                        'Entering degraded rendering mode. '
+                        'Attempting automatic recovery...'
+                    )
+                else:
+                    warnings.warn(
+                        f'OpenGL access violation intercepted in _draw_scene '
+                        f'(count: {state["count"]}/{state["threshold"]}). '
+                        f'Canvas may enter degraded mode if errors persist.'
+                    )
+
+                # Update the state in the class dictionary
+                self._access_violation_state[instance_id] = state
+
+                # Basic recovery attempt
+                self._attempt_basic_recovery()
+
+                # Draw degraded canvas if in degraded mode
+                if state['degraded_mode']:
+                    self._draw_degraded_canvas(bgcolor)
+
+                # Don't raise the error - this prevents the crash
                 return
             raise
         except Exception as e:
             # Log other drawing errors but don't crash
             warnings.warn(f'Drawing error in _draw_scene: {e}')
             raise
+
+    def _draw_degraded_canvas(self, bgcolor=None, permanent=False):
+        """Draw a degraded canvas state with minimal rendering."""
+        try:
+            if hasattr(self, 'context') and self.context is not None:
+                # Clear the canvas with a distinctive color if permanent
+                if permanent:
+                    # Use a slightly reddish background to indicate permanent degraded mode
+                    clear_color = (0.2, 0.1, 0.1, 1.0)
+                else:
+                    # Use normal background color
+                    clear_color = bgcolor if bgcolor else (0.0, 0.0, 0.0, 1.0)
+
+                # Minimal drawing - just clear
+                with contextlib.suppress(OSError, AttributeError):
+                    self.context.clear(color=clear_color)
+
+                # Try to draw a simple message if possible
+                if permanent:
+                    # Could add text rendering here if available
+                    pass
+        except (OSError, AttributeError):
+            pass
+
+    def _attempt_basic_recovery(self):
+        """Attempt basic OpenGL state recovery."""
+        try:
+            if hasattr(self, 'context') and self.context is not None:
+                context = self.context
+
+                # Clear all pending GL errors
+                error_count = 0
+                while (
+                    context.glGetError() != context.gl.GL_NO_ERROR
+                    and error_count < 20
+                ):
+                    error_count += 1
+
+                # Force completion of all pending operations
+                context.finish()
+                context.flush()
+
+                # Try to reset some basic GL state
+                try:
+                    # Reset viewport to a known state
+                    width, height = self.physical_size
+                    context.glViewport(0, 0, width, height)
+
+                    # Clear buffers
+                    context.glClear(
+                        context.gl.GL_COLOR_BUFFER_BIT
+                        | context.gl.GL_DEPTH_BUFFER_BIT
+                    )
+
+                except (OSError, AttributeError):
+                    pass
+
+        except (OSError, AttributeError, RuntimeError):
+            # If recovery itself fails, we'll rely on degraded mode
+            pass
+
+    def _attempt_comprehensive_recovery(self):
+        """Attempt comprehensive OpenGL recovery targeting cells 3D rendering issues."""
+        try:
+            if hasattr(self, 'context') and self.context is not None:
+                context = self.context
+
+                # First, try basic recovery
+                self._attempt_basic_recovery()
+
+                # Specific recovery for issues identified with cells 3D rendering
+                try:
+                    # Reset matrix stacks (critical for cells 3D and transforms)
+                    try:
+                        context.glMatrixMode(context.gl.GL_MODELVIEW)
+                        context.glLoadIdentity()
+                        context.glMatrixMode(context.gl.GL_PROJECTION)
+                        context.glLoadIdentity()
+                    except (OSError, AttributeError):
+                        pass
+
+                    # Reset vertex array state (critical for drawing operations)
+                    try:
+                        # Unbind any vertex arrays that might be corrupted
+                        if hasattr(context.gl, 'GL_VERTEX_ARRAY_BINDING'):
+                            context.glBindVertexArray(0)
+                        context.glBindBuffer(context.gl.GL_ARRAY_BUFFER, 0)
+                        context.glBindBuffer(
+                            context.gl.GL_ELEMENT_ARRAY_BUFFER, 0
+                        )
+                    except (OSError, AttributeError):
+                        pass
+
+                    # Reset texture state (important for image layers)
+                    try:
+                        for i in range(8):  # Reset common texture units
+                            context.glActiveTexture(context.gl.GL_TEXTURE0 + i)
+                            context.glBindTexture(context.gl.GL_TEXTURE_2D, 0)
+                            context.glBindTexture(context.gl.GL_TEXTURE_3D, 0)
+                    except (OSError, AttributeError):
+                        pass
+
+                    # Reset blending state (affects layer rendering)
+                    try:
+                        context.glDisable(context.gl.GL_BLEND)
+                        context.glBlendFunc(
+                            context.gl.GL_SRC_ALPHA,
+                            context.gl.GL_ONE_MINUS_SRC_ALPHA,
+                        )
+                    except (OSError, AttributeError):
+                        pass
+
+                    # Reset depth testing state
+                    try:
+                        context.glDisable(context.gl.GL_DEPTH_TEST)
+                        context.glDepthFunc(context.gl.GL_LESS)
+                    except (OSError, AttributeError):
+                        pass
+
+                    # Force a complete state flush
+                    context.finish()
+                    context.flush()
+
+                    # Test if we can perform basic OpenGL operations
+                    try:
+                        # Try a simple test draw operation
+                        context.clear()
+                        context.finish()
+                    except (OSError, AttributeError, RuntimeError):
+                        warnings.warn(
+                            'OpenGL recovery failed - basic operations still not working'
+                        )
+                        return False  # Recovery failed
+                    else:
+                        warnings.warn(
+                            'OpenGL recovery appears successful - matrix and buffer state reset'
+                        )
+                        return True  # Recovery successful
+
+                except (OSError, AttributeError, RuntimeError):
+                    warnings.warn(
+                        'OpenGL state reset failed - recovery incomplete'
+                    )
+                    return False  # Recovery failed
+
+        except (OSError, AttributeError, RuntimeError) as e:
+            warnings.warn(f'Comprehensive recovery failed: {e}')
+            return False
+
+        return False
 
 
 class VispyCanvas:
@@ -750,6 +1001,10 @@ class VispyCanvas:
         """
         layer = event.value
         try:
+            # Get resource manager and check current state before removal
+            resource_manager = get_shared_resource_manager()
+            active_types_before = resource_manager.get_active_layer_types()
+
             # Force a draw to ensure pending operations complete
             if (
                 hasattr(self, '_scene_canvas')
@@ -773,16 +1028,17 @@ class VispyCanvas:
             vispy_layer = self.layer_to_visual.pop(layer, None)
 
             if vispy_layer is not None:
+                # Extra safety: Force OpenGL context to finish operations before cleanup
+                if hasattr(self._scene_canvas, 'context'):
+                    with contextlib.suppress(OSError, AttributeError):
+                        self._scene_canvas.context.finish()
+                        self._scene_canvas.context.flush()
+
                 # Ensure the visual is properly detached from scene
                 if hasattr(vispy_layer, 'node') and hasattr(
                     vispy_layer.node, 'parent'
                 ):
                     vispy_layer.node.parent = None
-
-                # Force OpenGL to finish pending operations
-                if hasattr(self._scene_canvas, 'context'):
-                    with contextlib.suppress(OSError, AttributeError):
-                        self._scene_canvas.context.finish()
 
                 disconnect_events(self.viewer.camera.events, vispy_layer)
                 vispy_layer.close()
@@ -792,8 +1048,25 @@ class VispyCanvas:
             if layer in self._layer_overlay_to_visual:
                 del self._layer_overlay_to_visual[layer]
 
-            # Force garbage collection to ensure cleanup
+            # Check if we removed the last layer of a type and log for debugging
+            active_types_after = resource_manager.get_active_layer_types()
+            removed_types = active_types_before - active_types_after
+            if removed_types:
+                # This might trigger the resource sharing bug
+                warnings.warn(
+                    f'Removed last layer of type(s): {removed_types}. '
+                    f'Shared OpenGL resources may need cleanup.',
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+            # Force extra garbage collection for resource cleanup
             gc.collect()
+
+            # Force additional context operations to ensure clean state
+            if hasattr(self._scene_canvas, 'context'):
+                with contextlib.suppress(OSError, AttributeError):
+                    self._scene_canvas.context.finish()
 
         except (OSError, RuntimeError, AttributeError) as e:
             warnings.warn(f'Error during layer removal: {e}')
@@ -1168,3 +1441,35 @@ class VispyCanvas:
 
         except (OSError, AttributeError, RuntimeError) as e:
             warnings.warn(f'Failed to recover from OpenGL error: {e}')
+
+    def get_resource_manager_status(self) -> dict[str, Any]:
+        """
+        Get the current status of the shared resource manager for debugging.
+
+        Returns
+        -------
+        dict[str, Any]
+            Status information about shared OpenGL resources
+        """
+        resource_manager = get_shared_resource_manager()
+        return resource_manager.get_resource_status()
+
+    def force_resource_cleanup(self) -> None:
+        """
+        Force cleanup of all shared resources.
+
+        This is an emergency method that should only be used in error
+        recovery scenarios or when shutting down the application.
+        """
+        resource_manager = get_shared_resource_manager()
+        resource_manager.force_cleanup_all()
+
+        # Also force OpenGL context cleanup
+        if hasattr(self, '_scene_canvas') and self._scene_canvas is not None:
+            with contextlib.suppress(OSError, AttributeError):
+                if hasattr(self._scene_canvas, 'context'):
+                    self._scene_canvas.context.finish()
+                    self._scene_canvas.context.flush()
+
+        # Force garbage collection
+        gc.collect()

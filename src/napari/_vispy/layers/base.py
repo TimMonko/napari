@@ -1,3 +1,5 @@
+import contextlib
+import gc
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, cast
 
@@ -6,6 +8,9 @@ from vispy.scene import VisualNode
 from vispy.visuals.transforms import MatrixTransform
 
 from napari._vispy.utils.gl import BLENDING_MODES, get_max_texture_sizes
+from napari._vispy.utils.shared_resource_manager import (
+    get_shared_resource_manager,
+)
 from napari.layers import Layer
 from napari.utils.events import disconnect_events
 
@@ -61,6 +66,11 @@ class VispyBaseLayer(ABC, Generic[_L]):
             self.MAX_TEXTURE_SIZE_2D,
             self.MAX_TEXTURE_SIZE_3D,
         ) = get_max_texture_sizes()
+
+        # Register with shared resource manager
+        self._resource_manager = get_shared_resource_manager()
+        layer_type = self._get_layer_type()
+        self._resource_manager.register_layer(layer_type, self)
 
         self.layer.events.refresh.connect(self._on_refresh_change)
         self.layer.events.set_data.connect(self._on_data_change)
@@ -262,6 +272,96 @@ class VispyBaseLayer(ABC, Generic[_L]):
 
     def close(self):
         """Vispy visual is closing."""
-        disconnect_events(self.layer.events, self)
-        self.node.transforms = MatrixTransform()
-        self.node.parent = None
+        try:
+            # Unregister from shared resource manager first
+            if hasattr(self, '_resource_manager'):
+                layer_type = self._get_layer_type()
+                self._resource_manager.unregister_layer(layer_type, self)
+
+            # Ensure all pending GPU operations complete before cleanup
+            if hasattr(self, 'node') and self.node is not None:
+                # Properly cleanup vispy resources
+                try:
+                    # Force completion of any pending OpenGL operations for this node
+                    if (
+                        hasattr(self.node, 'canvas')
+                        and self.node.canvas is not None
+                    ):
+                        canvas = self.node.canvas
+                        if (
+                            hasattr(canvas, 'context')
+                            and canvas.context is not None
+                        ):
+                            with contextlib.suppress(OSError, AttributeError):
+                                canvas.context.finish()
+                                canvas.context.flush()
+
+                    # Properly detach from scene graph first
+                    if hasattr(self.node, 'parent'):
+                        self.node.parent = None
+
+                    # Clear any visual data that might hold OpenGL resources
+                    if hasattr(self.node, 'set_data'):
+                        with contextlib.suppress(AttributeError, OSError):
+                            self.node.set_data(None)
+
+                    # If this is a compound visual, clean up subvisuals
+                    if hasattr(self.node, '_subvisuals'):
+                        for subvisual in getattr(self.node, '_subvisuals', []):
+                            if subvisual is not None:
+                                with contextlib.suppress(
+                                    AttributeError, OSError
+                                ):
+                                    if hasattr(subvisual, 'parent'):
+                                        subvisual.parent = None
+                                    if hasattr(subvisual, 'set_data'):
+                                        subvisual.set_data(None)
+
+                    # Reset transforms after detachment to avoid holding references
+                    with contextlib.suppress(AttributeError, OSError):
+                        if hasattr(self.node, 'transform'):
+                            self.node.transform = MatrixTransform()
+
+                except (OSError, AttributeError, RuntimeError):
+                    # Continue cleanup even if some parts fail
+                    pass
+
+            # Disconnect events after visual cleanup
+            disconnect_events(self.layer.events, self)
+
+        except (OSError, AttributeError, RuntimeError):
+            # Emergency cleanup - still try to disconnect events
+            with contextlib.suppress(Exception):
+                disconnect_events(self.layer.events, self)
+
+        finally:
+            # Force a small garbage collection to help release resources
+            gc.collect()
+
+    def _get_layer_type(self) -> str:
+        """
+        Get the layer type name for resource management.
+
+        Returns
+        -------
+        str
+            The layer type name
+        """
+        if hasattr(self.layer, '__class__'):
+            class_name = self.layer.__class__.__name__.lower()
+            # Extract the base layer type name
+            if 'points' in class_name:
+                return 'points'
+            if 'labels' in class_name:
+                return 'labels'
+            if 'shapes' in class_name:
+                return 'shapes'
+            if 'image' in class_name:
+                return 'image'
+            if 'surface' in class_name:
+                return 'surface'
+            if 'tracks' in class_name:
+                return 'tracks'
+            if 'vectors' in class_name:
+                return 'vectors'
+        return 'unknown'
