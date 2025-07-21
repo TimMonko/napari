@@ -217,34 +217,5 @@ class VispyPointsLayer(VispyBaseLayer):
 
     def close(self):
         """Vispy visual is closing."""
-        try:
-            # Ensure all GPU operations are complete before cleanup
-            disconnect_events(self.layer.text.events, self)
-
-            # Try to clear any OpenGL resources explicitly if they exist
-            try:
-                if (
-                    hasattr(self.node, 'points_markers')
-                    and self.node.points_markers is not None
-                    and hasattr(self.node.points_markers, 'set_data')
-                ):
-                    # Clear the data to help with resource cleanup
-                    self.node.points_markers.set_data(pos=None)
-
-                if (
-                    hasattr(self.node, 'selection_markers')
-                    and self.node.selection_markers is not None
-                    and hasattr(self.node.selection_markers, 'set_data')
-                ):
-                    # Clear the data to help with resource cleanup
-                    self.node.selection_markers.set_data(pos=None)
-            except (AttributeError, OSError):
-                # Ignore errors during resource cleanup
-                pass
-
-        except (OSError, AttributeError, RuntimeError) as e:
-            import warnings
-
-            warnings.warn(f'Error during points layer cleanup: {e}')
-        finally:
-            super().close()
+        disconnect_events(self.layer.text.events, self)
+        super().close()
