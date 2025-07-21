@@ -6,7 +6,7 @@ import contextlib
 import gc
 import warnings
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from weakref import WeakSet
 
 import numpy as np
@@ -17,9 +17,6 @@ from napari._vispy.camera import VispyCamera
 from napari._vispy.mouse_event import NapariMouseEvent
 from napari._vispy.utils.cursor import QtCursorVisual
 from napari._vispy.utils.gl import get_max_texture_sizes
-from napari._vispy.utils.shared_resource_manager import (
-    get_shared_resource_manager,
-)
 from napari._vispy.utils.visual import create_vispy_overlay
 from napari.components._viewer_constants import CanvasPosition
 from napari.components.overlays import CanvasOverlay
@@ -1393,35 +1390,3 @@ class VispyCanvas:
 
         except (OSError, AttributeError, RuntimeError) as e:
             warnings.warn(f'Failed to recover from OpenGL error: {e}')
-
-    def get_resource_manager_status(self) -> dict[str, Any]:
-        """
-        Get the current status of the shared resource manager for debugging.
-
-        Returns
-        -------
-        dict[str, Any]
-            Status information about shared OpenGL resources
-        """
-        resource_manager = get_shared_resource_manager()
-        return resource_manager.get_resource_status()
-
-    def force_resource_cleanup(self) -> None:
-        """
-        Force cleanup of all shared resources.
-
-        This is an emergency method that should only be used in error
-        recovery scenarios or when shutting down the application.
-        """
-        resource_manager = get_shared_resource_manager()
-        resource_manager.force_cleanup_all()
-
-        # Also force OpenGL context cleanup
-        if hasattr(self, '_scene_canvas') and self._scene_canvas is not None:
-            with contextlib.suppress(OSError, AttributeError):
-                if hasattr(self._scene_canvas, 'context'):
-                    self._scene_canvas.context.finish()
-                    self._scene_canvas.context.flush()
-
-        # Force garbage collection
-        gc.collect()
