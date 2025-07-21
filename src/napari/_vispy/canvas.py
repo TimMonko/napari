@@ -1000,79 +1000,30 @@ class VispyCanvas:
         None
         """
         layer = event.value
-        try:
-            # Get resource manager and check current state before removal
-            # resource_manager = get_shared_resource_manager()
-            # active_types_before = resource_manager.get_active_layer_types()
 
-            # Force a draw to ensure pending operations complete
-            # if (
-            #     hasattr(self, '_scene_canvas')
-            #     and self._scene_canvas is not None
-            # ):
-            #     try:
-            #         # Attempt to flush any pending operations
-            #         if hasattr(self._scene_canvas, 'context'):
-            #             self._scene_canvas.context.flush_commands()
-            #     except (OSError, AttributeError):
-            #         # Ignore errors during context flush
-            #         pass
+        disconnect_events(layer.events, self)
+        disconnect_events(layer.events, self._overlay_callbacks[layer])
+        disconnect_events(
+            layer._overlays.events, self._overlay_callbacks[layer]
+        )
+        del self._overlay_callbacks[layer]
 
-            disconnect_events(layer.events, self)
-            disconnect_events(layer.events, self._overlay_callbacks[layer])
-            disconnect_events(
-                layer._overlays.events, self._overlay_callbacks[layer]
-            )
-            del self._overlay_callbacks[layer]
+        vispy_layer = self.layer_to_visual.pop(layer, None)
 
-            vispy_layer = self.layer_to_visual.pop(layer, None)
+        disconnect_events(self.viewer.camera.events, vispy_layer)
+        vispy_layer.close()
+        del vispy_layer
 
-            if vispy_layer is not None:
-                # Extra safety: Force OpenGL context to finish operations before cleanup
-                if hasattr(self._scene_canvas, 'context'):
-                    with contextlib.suppress(OSError, AttributeError):
-                        self._scene_canvas.context.finish()
-                        self._scene_canvas.context.flush()
+        self._remove_layer_overlays(layer)
+        del self._layer_overlay_to_visual[layer]
 
-                # Ensure the visual is properly detached from scene
-                if hasattr(vispy_layer, 'node') and hasattr(
-                    vispy_layer.node, 'parent'
-                ):
-                    vispy_layer.node.parent = None
+        # Force extra garbage collection for resource cleanup
+        gc.collect()  # NOTE: THIS IS REQUIRED TO PREVENT LEAK
+        self._scene_canvas.context.finish()
+        # Force additional context operations to ensure clean state
+        # NOTE: THIS SEEMS TO BE WHAT IS MINIMALLY NEEDED??????
 
-                disconnect_events(self.viewer.camera.events, vispy_layer)
-                vispy_layer.close()
-                del vispy_layer
-
-            self._remove_layer_overlays(layer)
-            if layer in self._layer_overlay_to_visual:
-                del self._layer_overlay_to_visual[layer]
-
-            # Check if we removed the last layer of a type and log for debugging
-            # active_types_after = resource_manager.get_active_layer_types()
-            # removed_types = active_types_before - active_types_after
-            # if removed_types:
-            #     # This might trigger the resource sharing bug
-            #     warnings.warn(
-            #         f'Removed last layer of type(s): {removed_types}. '
-            #         f'Shared OpenGL resources may need cleanup.',
-            #         UserWarning,
-            #         stacklevel=2,
-            #     )
-
-            # Force extra garbage collection for resource cleanup
-            gc.collect()  # NOTE: THIS IS REQUIRED TO PREVENT LEAK
-
-            # Force additional context operations to ensure clean state
-            # NOTE: THIS SEEMS TO BE WHAT IS MINIMALLY NEEDED??????
-            if hasattr(self._scene_canvas, 'context'):
-                with contextlib.suppress(OSError, AttributeError):
-                    self._scene_canvas.context.finish()
-
-        except (OSError, RuntimeError, AttributeError) as e:
-            warnings.warn(f'Error during layer removal: {e}')
-        finally:
-            self._update_scenegraph()
+        self._update_scenegraph()
 
     def _reorder_layers(self) -> None:
         """When the list is reordered, propagate changes to draw order."""
