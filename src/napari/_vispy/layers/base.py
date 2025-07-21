@@ -1,5 +1,3 @@
-import contextlib
-import gc
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, cast
 
@@ -264,42 +262,6 @@ class VispyBaseLayer(ABC, Generic[_L]):
 
     def close(self):
         """Vispy visual is closing."""
-        try:
-            # THE MINIMAL FIX: Ensure all pending GPU operations complete before cleanup
-            if hasattr(self, 'node') and self.node is not None:
-                try:
-                    # Force completion of any pending OpenGL operations
-                    if (
-                        hasattr(self.node, 'canvas')
-                        and self.node.canvas is not None
-                    ):
-                        canvas = self.node.canvas
-                        if (
-                            hasattr(canvas, 'context')
-                            and canvas.context is not None
-                        ):
-                            with contextlib.suppress(OSError, AttributeError):
-                                canvas.context.finish()  # Key fix: wait for operations
-                                canvas.context.flush()  # Key fix: flush command buffer
-
-                    # Properly detach from scene graph
-                    if hasattr(self.node, 'parent'):
-                        self.node.parent = None
-
-                    # NOTE: We skip set_data(None) as it causes TypeError in some visuals
-
-                except (OSError, AttributeError, RuntimeError):
-                    # Continue cleanup even if some parts fail
-                    pass
-
-            # Disconnect events after visual cleanup
-            disconnect_events(self.layer.events, self)
-
-        except (OSError, AttributeError, RuntimeError):
-            # Emergency cleanup - still try to disconnect events
-            with contextlib.suppress(Exception):
-                disconnect_events(self.layer.events, self)
-
-        finally:
-            # Small garbage collection to help release resources
-            gc.collect()
+        disconnect_events(self.layer.events, self)
+        self.node.transforms = MatrixTransform()
+        self.node.parent = None
