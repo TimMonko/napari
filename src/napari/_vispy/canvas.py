@@ -1002,21 +1002,21 @@ class VispyCanvas:
         layer = event.value
         try:
             # Get resource manager and check current state before removal
-            resource_manager = get_shared_resource_manager()
-            active_types_before = resource_manager.get_active_layer_types()
+            # resource_manager = get_shared_resource_manager()
+            # active_types_before = resource_manager.get_active_layer_types()
 
             # Force a draw to ensure pending operations complete
-            if (
-                hasattr(self, '_scene_canvas')
-                and self._scene_canvas is not None
-            ):
-                try:
-                    # Attempt to flush any pending operations
-                    if hasattr(self._scene_canvas, 'context'):
-                        self._scene_canvas.context.flush_commands()
-                except (OSError, AttributeError):
-                    # Ignore errors during context flush
-                    pass
+            # if (
+            #     hasattr(self, '_scene_canvas')
+            #     and self._scene_canvas is not None
+            # ):
+            #     try:
+            #         # Attempt to flush any pending operations
+            #         if hasattr(self._scene_canvas, 'context'):
+            #             self._scene_canvas.context.flush_commands()
+            #     except (OSError, AttributeError):
+            #         # Ignore errors during context flush
+            #         pass
 
             disconnect_events(layer.events, self)
             disconnect_events(layer.events, self._overlay_callbacks[layer])
@@ -1049,21 +1049,22 @@ class VispyCanvas:
                 del self._layer_overlay_to_visual[layer]
 
             # Check if we removed the last layer of a type and log for debugging
-            active_types_after = resource_manager.get_active_layer_types()
-            removed_types = active_types_before - active_types_after
-            if removed_types:
-                # This might trigger the resource sharing bug
-                warnings.warn(
-                    f'Removed last layer of type(s): {removed_types}. '
-                    f'Shared OpenGL resources may need cleanup.',
-                    UserWarning,
-                    stacklevel=2,
-                )
+            # active_types_after = resource_manager.get_active_layer_types()
+            # removed_types = active_types_before - active_types_after
+            # if removed_types:
+            #     # This might trigger the resource sharing bug
+            #     warnings.warn(
+            #         f'Removed last layer of type(s): {removed_types}. '
+            #         f'Shared OpenGL resources may need cleanup.',
+            #         UserWarning,
+            #         stacklevel=2,
+            #     )
 
             # Force extra garbage collection for resource cleanup
-            gc.collect()
+            gc.collect()  # NOTE: THIS IS REQUIRED TO PREVENT LEAK
 
             # Force additional context operations to ensure clean state
+            # NOTE: THIS SEEMS TO BE WHAT IS MINIMALLY NEEDED??????
             if hasattr(self._scene_canvas, 'context'):
                 with contextlib.suppress(OSError, AttributeError):
                     self._scene_canvas.context.finish()
