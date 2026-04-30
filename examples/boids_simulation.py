@@ -327,8 +327,7 @@ def main(
     boids = Boids3D(num_boids, width, height, depth)
 
     title = f"napari+{'Dragon' if 'dragon' in sys.modules else 'multiprocessing'}"
-    current = napari.current_viewer()
-    viewer = current if current is not None else napari.Viewer(title=title, ndisplay=3)
+    viewer = napari.current_viewer() or napari.Viewer(title=title, ndisplay=3)
     viewer.dims.ndisplay = 3  # ensure 3-D display when reusing an existing viewer
 
     if control_widget is not None:
