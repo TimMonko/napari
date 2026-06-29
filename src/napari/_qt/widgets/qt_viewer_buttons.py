@@ -4,7 +4,7 @@ import warnings
 from functools import wraps
 from typing import TYPE_CHECKING
 
-from qtpy.QtCore import QEvent, Qt
+from qtpy.QtCore import QEvent, QPoint, Qt
 from qtpy.QtWidgets import (
     QApplication,
     QDoubleSpinBox,
@@ -12,6 +12,7 @@ from qtpy.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QWidget,
 )
@@ -296,6 +297,12 @@ class QtViewerButtons(QFrame):
 
         self.resetViewButton = QtViewerPushButton(
             'home', action='napari:reset_view'
+        )
+        self.resetViewButton.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.resetViewButton.customContextMenuRequested.connect(
+            self._open_reset_view_popup
         )
         gvb = QtViewerPushButton(
             'grid_view_button', action='napari:toggle_grid'
@@ -644,6 +651,24 @@ class QtViewerButtons(QFrame):
         """
 
         self.viewer.camera.perspective = value
+
+    def _open_reset_view_popup(self, pos: QPoint):
+        """Open a context menu for the Home button."""
+        menu = QMenu(self)
+        menu.addAction(
+            'Reset View',
+            lambda: action_manager.trigger('napari:reset_view'),
+        )
+        menu.addAction(
+            'Fit to View',
+            lambda: self.viewer.fit_to_view(),
+        )
+        # Show menu above the click position otherwise it expands downwards
+        menu.adjustSize()
+        menu.exec(
+            self.resetViewButton.mapToGlobal(pos)
+            - QPoint(0, menu.sizeHint().height())
+        )
 
     def _open_roll_popup(self):
         """Open a grid popup to manually order the dimensions"""
