@@ -62,6 +62,7 @@ class Camera(EventedModel):
         VerticalAxisOrientation,
         HorizontalAxisOrientation,
     ] = DEFAULT_ORIENTATION_TYPED
+    sync: bool = False
 
     @field_validator('center', 'angles', mode='before')
     @classmethod
