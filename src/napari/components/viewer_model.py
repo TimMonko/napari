@@ -294,7 +294,7 @@ class ViewerModel(KeymapProvider, MousemapProviderPydantic, EventedModel):
 
         # Connect events
         self.dims.events.ndisplay.connect(self._update_layers)
-        self.dims.events.ndisplay.connect(self.fit_to_view)
+        self.dims.events.ndisplay.connect(self._on_ndisplay_changed)
         self.dims.events.order.connect(self._update_layers)
         self.dims.events.order.connect(self.fit_to_view)
         self.dims.events.point.connect(self._update_layers)
@@ -501,6 +501,31 @@ class ViewerModel(KeymapProvider, MousemapProviderPydantic, EventedModel):
             zoom=self.camera.zoom,
             angles=self.camera.angles,
         )
+
+    def _on_ndisplay_changed(self) -> None:
+        """Handle ndisplay changes with optional camera state preservation.
+
+        When ``camera.sync`` is enabled, center and zoom persist naturally
+        between 2D and 3D — z is set from the dims slider when entering
+        3D, and the dims slider is set from the 3D camera z when entering
+        2D. When sync is disabled, ``fit_to_view`` runs as before.
+        """
+        if self.camera.sync:
+            center = list(self.camera.center)
+            # Guard: with ndim < 3 there's no hidden dim to sync
+            if len(self.dims.order) >= 3:
+                new_display_dim = self.dims.order[-3]
+                if self.dims.ndisplay == 3:
+                    center[0] = float(self.dims.point[new_display_dim])
+                else:
+                    self.dims.set_point(new_display_dim, center[0])
+                    center[0] = 0.0
+            elif self.dims.ndisplay == 2:
+                center[0] = 0.0
+            self.camera.center = tuple(center)
+            return
+
+        self.fit_to_view()
 
     def _get_scene_parameters(
         self,
