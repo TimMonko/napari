@@ -294,8 +294,9 @@ class ViewerModel(KeymapProvider, MousemapProviderPydantic, EventedModel):
 
         # Connect events
         self.dims.events.ndisplay.connect(self._update_layers)
-        self.dims.events.ndisplay.connect(self._save_camera_state, position='first')
-        self.dims.events.ndisplay.connect(self.fit_to_view)
+        self.dims.events.ndisplay.connect(
+            self._save_camera_state, position='first'
+        )
         self.dims.events.ndisplay.connect(self._on_ndisplay_changed)
         self.dims.events.order.connect(self._update_layers)
         self.dims.events.order.connect(self.fit_to_view)
@@ -309,7 +310,8 @@ class ViewerModel(KeymapProvider, MousemapProviderPydantic, EventedModel):
         #        but this should be ok because we have early returns when slices are unchanged.
         self.dims.events.current_step.connect(self._update_layers)
 
-        # Track previous ndisplay for per-mode camera state caching.
+        # Track previous ndisplay for per-mode camera state caching
+        # after all ndisplay related events
         self._previous_ndisplay: int = self.dims.ndisplay
 
         self.dims.events.margin_left.connect(self._update_layers)
@@ -528,7 +530,8 @@ class ViewerModel(KeymapProvider, MousemapProviderPydantic, EventedModel):
             self.camera.zoom = cached['zoom']
             self.camera.angles = cached['angles']
         else:
-            # First time in this mode — cache fit_to_view's defaults
+            # First time in this mode — use fit_to_view defaults
+            self.fit_to_view()
             self.camera._cache_state(new_mode)
 
         self._previous_ndisplay = new_mode
