@@ -367,6 +367,8 @@ ignore = [
   "src/napari/_version.py",  # added during build by setuptools_scm
   "tools/minreq.py",
   "tox.ini",
+  "pixi.toml",
+  "pixi.lock",
   "src/napari/_qt/qt_resources/_qt_resources_*.py",
   "binder/*",
   ".env_sample",

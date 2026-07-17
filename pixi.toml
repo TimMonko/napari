@@ -57,8 +57,15 @@ napari = { path = ".", editable = true, extras = ["pyside6", "testing", "optiona
 napari = { path = ".", editable = true, extras = ["testing", "optional-numba"] }
 
 [feature.headless.tasks]
-# Mirrors the tox `headless` env: skip the Qt/vispy suites that require bindings.
-test = "pytest src/napari src/napari_builtins --color=yes --import-mode=importlib --ignore src/napari/_vispy --ignore src/napari/_qt --ignore src/napari/_tests --ignore src/napari_builtins/_qt"
+# Headless = napari with no Qt stack. napari's `testing` extra always pulls in
+# pytest-qt, and qtpy is a core dependency; both error without a Qt binding
+# (pytest-qt at startup; qtpy raises QtBindingsNotFoundError, which the
+# importorskip in test_env_detection.py does not catch). So strip the Qt stack
+# first — mirroring the tox `headless` env's commands_pre — then skip the
+# Qt/vispy suites.
+test = { cmd = "pytest src/napari src/napari_builtins --color=yes --import-mode=importlib --ignore src/napari/_vispy --ignore src/napari/_qt --ignore src/napari/_tests --ignore src/napari_builtins/_qt", depends-on = ["_strip-qt"] }
+# Internal: remove the Qt test stack so headless truly has no bindings.
+_strip-qt = "python -m pip uninstall -y pytest-qt qtpy"
 
 # --- Shared test tasks for the Qt environments -------------------------------
 # The `headless` feature defines its own `test` task above; the `test` feature is
