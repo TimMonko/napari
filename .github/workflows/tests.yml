@@ -14,7 +14,7 @@
 # NOTE: while migration off tox is in progress this runs ALONGSIDE the existing
 # tox suites and should stay OUT of branch-protection required checks until the
 # pixi matrix fully covers the supported combinations.
-name: Test
+name: Tests
 
 on:
   pull_request:
@@ -44,6 +44,32 @@ concurrency:
 permissions: {}
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Fast canary: a couple of no-coverage cells + headless. The full matrices
+  # below gate on this, so obvious breakage fails in minutes before the broad
+  # (and slow, cross-OS) matrix is provisioned.
+  # ---------------------------------------------------------------------------
+  test-initial:
+    name: initial · ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - test-py311-pyqt5
+          - test-py314-pyqt6
+          - test-py312-headless
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0  # setuptools_scm needs full history/tags
+          persist-credentials: false
+      - uses: ./.github/actions/pixi-test
+        with:
+          environment: ${{ matrix.environment }}
+          task: test  # canary: no coverage, for speed
+
   # ---------------------------------------------------------------------------
   # Build + inspect the sdist/wheel directly (packaging/manifest validation).
   # ---------------------------------------------------------------------------
@@ -122,6 +148,7 @@ jobs:
   # or on a manual dispatch that selects `pr`.
   # ---------------------------------------------------------------------------
   test-pr:
+    needs: test-initial
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && inputs.mode == 'pr')
@@ -130,10 +157,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Mirrors test_pull_requests.yml. The canary combos (py311-pyqt5,
+        # py314-pyqt6, py312-headless on ubuntu-latest) run in test-initial and
+        # are intentionally omitted here to avoid double-running them.
         include:
-          - { environment: test-py311-pyqt5, runner: ubuntu-latest }
-          - { environment: test-py314-pyqt6, runner: ubuntu-latest }
-          - { environment: test-py312-headless, runner: ubuntu-latest }
+          # base backends
+          - { environment: test-py314-pyqt5, runner: ubuntu-latest }
+          - { environment: test-py314-pyside6, runner: ubuntu-latest }
+          # cross-OS
+          - { environment: test-py311-pyqt5, runner: windows-latest }
+          - { environment: test-py314-pyqt6, runner: windows-latest }
+          - { environment: test-py314-pyqt5-nonumba, runner: macos-15-intel }
+          - { environment: test-py314-pyqt6, runner: macos-15 }
+          - { environment: test-py314-pyqt6, runner: ubuntu-24.04-arm }
+          # variants
+          - { environment: test-py314-pyqt6-nonumba, runner: ubuntu-latest }
+          - { environment: test-py311-pyqt6-torch, runner: ubuntu-latest }
+          - { environment: test-py313-pyqt6-alloptional, runner: ubuntu-22.04 }
+          - { environment: test-py312-examples, runner: ubuntu-latest }
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -142,13 +183,22 @@ jobs:
       - uses: ./.github/actions/pixi-test
         with:
           environment: ${{ matrix.environment }}
+      - name: Upload coverage data
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-${{ matrix.environment }}-${{ matrix.runner }}
+          path: .coverage*
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
-  # Comprehensive scope: every pixi test env on Linux, plus cross-OS coverage of
-  # the key backends. Runs on push to main / v* tags, or a manual dispatch that
-  # selects `comprehensive`.
+  # Comprehensive scope: pyqt5 across all supported Pythons on Linux+Windows,
+  # plus macOS/arm and the optional-dependency variants. Runs on push to main /
+  # v* tags, or a manual dispatch that selects `comprehensive`.
   # ---------------------------------------------------------------------------
   test-comprehensive:
+    needs: test-initial
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && inputs.mode == 'comprehensive')
@@ -157,15 +207,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Mirrors test_comprehensive.yml.
         include:
-          - { environment: test-py311-pyqt5, runner: ubuntu-latest }
-          - { environment: test-py314-pyqt6, runner: ubuntu-latest }
-          - { environment: test-py312-pyside6, runner: ubuntu-latest }
-          - { environment: test-py312-headless, runner: ubuntu-latest }
+          # pyqt5 across all supported Pythons, on Linux and Windows
+          - { environment: test-py312-pyqt5, runner: ubuntu-latest }
+          - { environment: test-py313-pyqt5, runner: ubuntu-latest }
+          - { environment: test-py314-pyqt5, runner: ubuntu-latest }
           - { environment: test-py311-pyqt5, runner: windows-latest }
-          - { environment: test-py314-pyqt6, runner: windows-latest }
-          - { environment: test-py314-pyqt6, runner: macos-15 }
-          - { environment: test-py312-pyside6, runner: macos-15 }
+          - { environment: test-py312-pyqt5, runner: windows-latest }
+          - { environment: test-py313-pyqt5, runner: windows-latest }
+          - { environment: test-py314-pyqt5, runner: windows-latest }
+          # macOS + linux-arm
+          - { environment: test-py311-pyqt5, runner: macos-15 }
+          - { environment: test-py314-pyqt6, runner: ubuntu-24.04-arm }
+          # variants
+          - { environment: test-py311-headless, runner: ubuntu-22.04 }
+          - { environment: test-py314-pyqt6-torch, runner: ubuntu-latest }
+          - { environment: test-py312-pyside6-torch, runner: ubuntu-latest }
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -174,3 +232,42 @@ jobs:
       - uses: ./.github/actions/pixi-test
         with:
           environment: ${{ matrix.environment }}
+      - name: Upload coverage data
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-${{ matrix.environment }}-${{ matrix.runner }}
+          path: .coverage*
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Combine coverage across whichever scope ran and print a report. Not gated
+  # (no fail-under) and not uploaded anywhere — informational only.
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage report
+    needs: [test-pr, test-comprehensive]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install coverage
+      - name: Download coverage data
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-*
+          path: coverage-data
+          merge-multiple: true
+      - name: Combine and report
+        run: |
+          coverage combine coverage-data
+          # --ignore-errors: some tests execute generated temp .py files that are
+          # gone by the time this aggregation job runs (and cross-OS paths may not
+          # resolve); this is a print-only report, so skip unreadable sources.
+          coverage report --show-missing --ignore-errors

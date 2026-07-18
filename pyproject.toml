@@ -822,6 +822,9 @@ exclude_lines = [
 ]
 
 [tool.coverage.run]
+# store paths relative to the repo root so coverage data collected on different
+# runners/OSes/Python versions combines cleanly across the CI matrix
+relative_files = true
 omit = [
     "*/_vendor/*",
     "*/_version.py",

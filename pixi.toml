@@ -1,19 +1,17 @@
 # pixi manifest for napari — https://pixi.sh
 #
-# This is a PILOT that runs *alongside* the existing tox + resources/constraints
-# setup while we evaluate migrating CI off them. It is not yet the source of
-# truth for the full test matrix.
+# The environments below are intended to match the current coverage of the tox-based
+# "PR Test" (test_pull_requests.yml) and "Comprehensive Test" (test_comprehensive.yml)
+# GitHub Actions matrices in tests.yml pair each environment with the runner OS.
 #
-# Design (see also the discussion in the PR that introduced this file):
+# Design:
 #   * PyPI-first: pixi provides only the Python interpreter (from conda-forge);
 #     napari and every Python dependency are installed from PyPI via uv, so
 #     pyproject.toml stays the single source of truth for versions/pins.
-#   * napari is installed *editable* (pure-Python project, setuptools_scm) — no
-#     pixi-build backend is needed.
-#   * Features are kept orthogonal so environments compose cleanly. Crucially,
-#     `napari` is defined exactly once per environment (a backend feature, or the
-#     `headless` feature); duplicate pypi definitions across combined features
-#     are an error.
+#   * napari is installed as editable in the test environment, is defined exactly
+#     once per environment (in one profile feature); duplicate pypi definitions
+#     across features are an error, so each profile spells out the extras it needs.
+#   * Each profile is restricted to the platforms run in CI
 #
 # Common commands:
 #   pixi run test                              # default env (py3.12 + PyQt6)
@@ -25,67 +23,121 @@
 [workspace]
 name = "napari"
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
-# TODO(full-migration): add "linux-aarch64" (CI runs ubuntu-24.04-arm).
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 
-# --- Python-version features: pin only the interpreter -----------------------
+# Python-version features: pin only the interpreter, everything else we get from PyPI
 [feature.py311.dependencies]
 python = "3.11.*"
 
 [feature.py312.dependencies]
 python = "3.12.*"
 
+[feature.py313.dependencies]
+python = "3.13.*"
+
 [feature.py314.dependencies]
 python = "3.14.*"
-# TODO(full-migration): add py313 feature + environments for the full matrix.
 
-# --- Backend features: the sole definer of the editable napari install -------
-# Version pins for the Qt bindings live in pyproject.toml's extras, so they are
-# reused here rather than duplicated. `testing` and `optional-numba` are folded
-# in because every pilot environment is a test environment.
-[feature.pyqt6.pypi-dependencies]
-napari = { path = ".", editable = true, extras = ["pyqt6", "testing", "optional-numba"] }
-
+# Backend profiles: define the editable napari install
+# Qt-binding version pins live in pyproject.toml's extras and are reused here.
+[feature.pyqt5]
+platforms = ["linux-64", "win-64", "osx-arm64"]  # PyQt5 has no linux-aarch64 wheels
 [feature.pyqt5.pypi-dependencies]
 napari = { path = ".", editable = true, extras = ["pyqt5", "testing", "optional-numba"] }
 
+[feature.pyqt6]
+platforms = ["linux-64", "linux-aarch64", "win-64", "osx-arm64"]
+[feature.pyqt6.pypi-dependencies]
+napari = { path = ".", editable = true, extras = ["pyqt6", "testing", "optional-numba"] }
+
+[feature.pyside6]
+platforms = ["linux-64"]
 [feature.pyside6.pypi-dependencies]
 napari = { path = ".", editable = true, extras = ["pyside6", "testing", "optional-numba"] }
 
-# --- Headless feature: napari without any Qt binding -------------------------
-[feature.headless.pypi-dependencies]
-napari = { path = ".", editable = true, extras = ["testing", "optional-numba"] }
+# no-numba: exercise the pure-Python fallback
+[feature.pyqt5-nonumba]
+platforms = ["osx-64"]  # runs only on macos-15-intel
+[feature.pyqt5-nonumba.pypi-dependencies]
+napari = { path = ".", editable = true, extras = ["pyqt5", "testing"] }
 
-[feature.headless.tasks]
-# Headless = napari with no Qt stack. napari's `testing` extra always pulls in
-# pytest-qt, and qtpy is a core dependency; both error without a Qt binding
-# (pytest-qt at startup; qtpy raises QtBindingsNotFoundError, which the
-# importorskip in test_env_detection.py does not catch). So strip the Qt stack
-# first — mirroring the tox `headless` env's commands_pre — then skip the
-# Qt/vispy suites.
+[feature.pyqt6-nonumba]
+platforms = ["linux-64"]
+[feature.pyqt6-nonumba.pypi-dependencies]
+napari = { path = ".", editable = true, extras = ["pyqt6", "testing"] }
+
+# testing_extra adds torch; linux-64 only because torch lacks wheels for some platforms
+[feature.pyqt6-torch]
+platforms = ["linux-64"]
+[feature.pyqt6-torch.pypi-dependencies]
+napari = { path = ".", editable = true, extras = ["pyqt6", "testing", "optional-numba", "testing_extra"] }
+
+[feature.pyside6-torch]
+platforms = ["linux-64"]
+[feature.pyside6-torch.pypi-dependencies]
+napari = { path = ".", editable = true, extras = ["pyside6", "testing", "optional-numba", "testing_extra"] }
+
+# all_optional (= optional + partsegcore; optional already includes numba)
+[feature.pyqt6-alloptional]
+platforms = ["linux-64"]
+[feature.pyqt6-alloptional.pypi-dependencies]
+napari = { path = ".", editable = true, extras = ["pyqt6", "testing", "all_optional"] }
+
+# examples profile: gallery deps + run the examples suite
+[feature.examples-test]
+platforms = ["linux-64"]
+[feature.examples-test.pypi-dependencies]
+napari = { path = ".", editable = true, extras = ["pyqt6", "testing", "optional-numba", "gallery"] }
+[feature.examples-test.tasks]
+test = "pytest src/napari/_tests/test_examples.py -v --color=yes --import-mode=importlib"
+test-cov = "coverage run --parallel-mode -m pytest src/napari/_tests/test_examples.py -v --color=yes --import-mode=importlib"
+
+# headless profile: napari without any Qt binding
+[feature.headless-test]
+platforms = ["linux-64"]
+[feature.headless-test.pypi-dependencies]
+napari = { path = ".", editable = true, extras = ["testing", "optional-numba"] }
+[feature.headless-test.tasks]
 test = { cmd = "pytest src/napari src/napari_builtins --color=yes --import-mode=importlib --ignore src/napari/_vispy --ignore src/napari/_qt --ignore src/napari/_tests --ignore src/napari_builtins/_qt", depends-on = ["_strip-qt"] }
-# Internal: remove the Qt test stack so headless truly has no bindings.
+test-cov = { cmd = "coverage run --parallel-mode -m pytest src/napari src/napari_builtins --color=yes --import-mode=importlib --ignore src/napari/_vispy --ignore src/napari/_qt --ignore src/napari/_tests --ignore src/napari_builtins/_qt", depends-on = ["_strip-qt"] }
+#  napari's `testing` extra includes pytest-qt and qtpy
+# both error without a Qt binding, so we strip them when testing headless
 _strip-qt = "python -m pip uninstall -y pytest-qt qtpy"
 
-# --- Shared test tasks for the Qt environments -------------------------------
-# The `headless` feature defines its own `test` task above; the `test` feature is
-# never combined with `headless`, so the task name does not collide.
+# NOTE: MIN_REQ (minimum-version) testing stays on tox-min-req for now — see
+# .github/workflows/test_min_req.yml. `uv --resolution lowest-direct` is not an
+# equivalent (it floors napari's many *unbounded* deps to broken ancient
+# versions, e.g. aiohttp 0.1); moving it here needs deps to declare lower bounds.
+
+# Shared test tasks
+# Profiles that define their own `test` task (headless-test / examples-test) are
+# never combined with this feature, so the task name does not collide.
 [feature.test.tasks]
 test = "pytest src/napari src/napari_builtins --color=yes --import-mode=importlib"
 test-cov = "coverage run --parallel-mode -m pytest src/napari src/napari_builtins --color=yes --import-mode=importlib"
 
-# --- Environments ------------------------------------------------------------
-# Pixi has no automatic matrix expansion (deliberate) — each combination is an
-# explicit, named entry. Features keep the *content* DRY. Platforms are solved
-# per-environment in the one lockfile, so only Python x backend multiplies the
-# count. solve-group is keyed by Python version so same-interpreter environments
-# resolve shared deps to identical versions.
-#
-# This is a representative PILOT subset (fast PR gate + a couple of variants),
-# not the full tox matrix.
 [environments]
-default = { features = ["py312", "pyqt6", "test"], solve-group = "py312" }
-test-py311-pyqt5 = { features = ["py311", "pyqt5", "test"], solve-group = "py311" }
-test-py314-pyqt6 = { features = ["py314", "pyqt6", "test"], solve-group = "py314" }
-test-py312-pyside6 = { features = ["py312", "pyside6", "test"], solve-group = "py312" }
-test-py312-headless = { features = ["py312", "headless"], solve-group = "py312" }
+default = { features = ["py312", "pyqt6", "test"] }
+
+# Standard python x backend (pyqt5 across all Pythons for the comprehensive base)
+test-py311-pyqt5 = ["py311", "pyqt5", "test"]
+test-py312-pyqt5 = ["py312", "pyqt5", "test"]
+test-py313-pyqt5 = ["py313", "pyqt5", "test"]
+test-py314-pyqt5 = ["py314", "pyqt5", "test"]
+test-py314-pyqt6 = ["py314", "pyqt6", "test"]
+test-py314-pyside6 = ["py314", "pyside6", "test"]
+
+# Variants
+test-py314-pyqt5-nonumba = ["py314", "pyqt5-nonumba", "test"]
+test-py314-pyqt6-nonumba = ["py314", "pyqt6-nonumba", "test"]
+test-py311-pyqt6-torch = ["py311", "pyqt6-torch", "test"]
+test-py314-pyqt6-torch = ["py314", "pyqt6-torch", "test"]
+test-py312-pyside6-torch = ["py312", "pyside6-torch", "test"]
+test-py313-pyqt6-alloptional = ["py313", "pyqt6-alloptional", "test"]
+
+# Headless (no Qt)
+test-py311-headless = ["py311", "headless-test"]
+test-py312-headless = ["py312", "headless-test"]
+
+# Examples suite
+test-py312-examples = ["py312", "examples-test"]
