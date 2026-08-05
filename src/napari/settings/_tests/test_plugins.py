@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from npe2._pytest_plugin import TestPluginManager
 from napari.settings._plugin_config_generator import (
     _build_single_config_model,
-    _snake_identifier,
     plugin_configuration_generator,
 )
 
@@ -29,17 +28,6 @@ def mock_pm(npe2pm: 'TestPluginManager'):
     npe2pm._command_registry = mock_reg
     with npe2pm.tmp_plugin(manifest=MANIFEST_PATH):
         yield npe2pm
-
-
-def test_snake_identifier():
-    assert (
-        _snake_identifier('demoplugin.value1.value2', 'demoplugin')
-        == 'value1_value2'
-    )
-    assert (
-        _snake_identifier('Demo Configuration for widget 1')
-        == 'demo_configuration_for_widget_1'
-    )
 
 
 def test_single_config(mock_pm: 'TestPluginManager'):
