@@ -266,6 +266,7 @@ class ScalarFieldBase(Layer, ABC):
         )
         xr_metadata = _get_xr_metadata(
             xr_source,
+            image_dims=ndim,
             axis_labels=axis_labels,
             scale=scale,
             translate=translate,

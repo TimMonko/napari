@@ -237,6 +237,7 @@ def _get_xr_units(data: xr.DataArray) -> list[str | None]:
 def _get_xr_metadata(
     data: ArrayLike,
     *,
+    image_dims: int | None = None,
     axis_labels: tuple[str, ...] | None = None,
     scale: list[float] | None = None,
     translate: list[float] | None = None,
@@ -250,14 +251,29 @@ def _get_xr_metadata(
     Any field passed in as ``None`` is inferred from *data* where possible;
     explicitly provided values pass through unchanged.
 
+    If ``image_dims`` is one less than the number of xarray dimensions, the
+    final dimension is treated as an RGB/RGBA channel dimension and excluded
+    from inferred metadata.
+
     Note: Only ``axis_labels``s inferred for ``Variable``-like objects,
     which have no coordinates.
     """
+    axis_labels_provided = axis_labels is not None
+    scale_provided = scale is not None
+    translate_provided = translate is not None
+    units_provided = units is not None
+
     props = _check_xarray(data)
-    if props.has_dims and axis_labels is None:
-        axis_labels = _get_xr_axis_labels(
-            cast('xr.DataArray | xr.Variable', data)
+    data_with_dims = None
+    if props.has_dims:
+        data_with_dims = cast(
+            'xr.DataArray | xr.Variable',
+            data,
         )
+
+        if axis_labels is None:
+            axis_labels = _get_xr_axis_labels(data_with_dims)
+
     if props.has_coords:
         data_array = cast('xr.DataArray', data)
         if scale is None:
@@ -266,4 +282,21 @@ def _get_xr_metadata(
             translate = _get_xr_translate(data_array)
         if units is None:
             units = _get_xr_units(data_array)
+
+    has_channel_axis = (
+        image_dims is not None
+        and data_with_dims is not None
+        and len(data_with_dims.dims) == image_dims + 1
+    )
+
+    if has_channel_axis:
+        if not axis_labels_provided and axis_labels is not None:
+            axis_labels = axis_labels[:-1]
+        if not scale_provided and scale is not None:
+            scale = scale[:-1]
+        if not translate_provided and translate is not None:
+            translate = translate[:-1]
+        if not units_provided and units is not None:
+            units = units[:-1]
+
     return _XarrayMetadata(axis_labels, scale, translate, units)
