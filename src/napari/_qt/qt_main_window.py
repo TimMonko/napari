@@ -11,7 +11,6 @@ import inspect
 import os
 import sys
 import time
-import warnings
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -66,8 +65,8 @@ from napari._qt.threads.status_checker import StatusChecker
 from napari._qt.utils import QImg2array, qbytearray_to_str, str_to_qbytearray
 from napari._qt.widgets.qt_command_palette import QCommandPalette
 from napari._qt.widgets.qt_viewer_dock_widget import (
-    _SHORTCUT_DEPRECATION_STRING,
     QtViewerDockWidget,
+    warn_deprecated_shortcut,
 )
 from napari._qt.widgets.qt_viewer_status_bar import ViewerStatusBar
 from napari.plugins import (
@@ -80,6 +79,7 @@ from napari.utils import perf
 from napari.utils._proxies import MappingProxy, PublicOnlyProxy
 from napari.utils.events import Event
 from napari.utils.io import imsave
+from napari.utils.migrations import deprecation_warning
 from napari.utils.misc import (
     in_ipython,
     in_jupyter,
@@ -867,13 +867,16 @@ class Window:
 
     @property
     def qt_viewer(self):
-        warnings.warn(
-            'Public access to Window.qt_viewer is deprecated and will be removed in\n'
-            'no earlier than v0.10.0. It is considered an "implementation detail" '
-            'of the napari\napplication, not part of the napari viewer model. If your use case\n'
-            'requires access to qt_viewer, please open an issue to discuss.',
-            category=FutureWarning,
-            stacklevel=2,
+        deprecation_warning(
+            name='Public access to Window.qt_viewer',
+            since='0.4.13',
+            window='2027-Q1',
+            details=(
+                'It is considered an implementation detail of the napari '
+                'application, not part of the napari viewer model. If your '
+                'use case requires access to qt_viewer, please open an issue '
+                'to discuss.'
+            ),
         )
         return self._qt_window._qt_viewer
 
@@ -1221,11 +1224,7 @@ class Window:
         area = self._resolve_dock_area(name=name, area=area)
 
         if shortcut is not _sentinel:
-            warnings.warn(
-                _SHORTCUT_DEPRECATION_STRING.format(shortcut=shortcut),
-                FutureWarning,
-                stacklevel=2,
-            )
+            warn_deprecated_shortcut(shortcut)
             dock_widget = QtViewerDockWidget(
                 self._qt_viewer,
                 widget,
@@ -1274,13 +1273,17 @@ class Window:
         """
         # As many plugins uses `_dock_widget` to access one widget from the
         # other widget we should keep this name for a longer period
-        warnings.warn(
-            'The `_dock_widgets` property is private and should not be used in any plugin code. '
-            'To return the inner widget, use the `dock_widgets` property instead.'
-            'If you need the dock wrapper, return it via `dock_widgets[name].parent()`'
-            '(or `dock_widgets[name].native.parent()` for magicgui widgets).',
-            FutureWarning,
-            stacklevel=2,
+        deprecation_warning(
+            name='The private `_dock_widgets` property',
+            replacement='the `dock_widgets` property',
+            since='0.6.2',
+            window='2027-Q1',
+            details=(
+                'To return the inner widget, use `dock_widgets`. If you need '
+                'the dock wrapper, return it via `dock_widgets[name].parent()` '
+                '(or `dock_widgets[name].native.parent()` for magicgui '
+                'widgets).'
+            ),
         )
         return self._wrapped_dock_widgets
 

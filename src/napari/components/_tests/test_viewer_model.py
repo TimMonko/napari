@@ -1401,6 +1401,6 @@ def test_deprecated_property_events_warn_on_connect(name):
     """Connecting to a deprecated property's event warns like the getter."""
     viewer = ViewerModel()
     with pytest.warns(
-        DeprecationWarning, match=f'viewer.{name} is a deprecated'
+        DeprecationWarning, match=rf'{name} is deprecated since'
     ):
         getattr(viewer.events, name).connect(lambda e: None)
