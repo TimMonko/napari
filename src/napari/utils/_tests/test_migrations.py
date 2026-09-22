@@ -12,7 +12,7 @@ from napari.utils.migrations import (
 
 
 def test_simple():
-    @rename_argument('a', 'b', '1', '0.5')
+    @rename_argument('a', 'b', '2027-Q1', '0.5')
     def sample_fun(b):
         return b
 
@@ -26,7 +26,7 @@ def test_simple():
 
 def test_constructor():
     class Sample:
-        @rename_argument('a', 'b', '1', '0.5')
+        @rename_argument('a', 'b', '2027-Q1', '0.5')
         def __init__(self, b) -> None:
             self.b = b
 
@@ -171,7 +171,7 @@ def test_deprecated_class_name():
         pass
 
     MacOSX = deprecated_class_name(
-        macOS, 'MacOSX', version='10.12', since_version='10.11'
+        macOS, 'MacOSX', window='2027-Q1', since_version='10.11'
     )
 
     with pytest.warns(FutureWarning, match='deprecated.*macOS'):
@@ -186,7 +186,7 @@ def test_deprecated_class_name():
 def test_deprecating_dict_with_renamed_in_deprecated_keys():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
     assert 'c' in d.deprecated_keys
 
@@ -194,7 +194,7 @@ def test_deprecating_dict_with_renamed_in_deprecated_keys():
 def test_deprecating_dict_with_renamed_getitem_deprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
     with pytest.warns(FutureWarning, match='is deprecated since'):
         assert d['c'] == 1
@@ -203,7 +203,7 @@ def test_deprecating_dict_with_renamed_getitem_deprecated():
 def test_deprecating_dict_with_renamed_get_deprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
     with pytest.warns(FutureWarning, match='is deprecated since'):
         assert d.get('c') == 1
@@ -212,7 +212,7 @@ def test_deprecating_dict_with_renamed_get_deprecated():
 def test_deprecating_dict_with_renamed_set_nondeprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
 
     d['a'] = 3
@@ -224,7 +224,7 @@ def test_deprecating_dict_with_renamed_set_nondeprecated():
 def test_deprecating_dict_with_renamed_set_deprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
 
     with pytest.warns(FutureWarning, match='is deprecated since'):
@@ -238,7 +238,7 @@ def test_deprecating_dict_with_renamed_set_deprecated():
 def test_deprecating_dict_with_renamed_update_nondeprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
 
     d.update({'a': 3})
@@ -250,7 +250,7 @@ def test_deprecating_dict_with_renamed_update_nondeprecated():
 def test_deprecating_dict_with_renamed_update_deprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
 
     with pytest.warns(FutureWarning, match='is deprecated since'):
@@ -264,7 +264,7 @@ def test_deprecating_dict_with_renamed_update_deprecated():
 def test_deprecating_dict_with_renamed_del_nondeprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
     assert 'a' in d
     with pytest.warns(FutureWarning, match='is deprecated since'):
@@ -281,7 +281,7 @@ def test_deprecating_dict_with_renamed_del_nondeprecated():
 def test_deprecating_dict_with_renamed_del_deprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
     with pytest.warns(FutureWarning, match='is deprecated since'):
         assert 'c' in d
@@ -298,7 +298,7 @@ def test_deprecating_dict_with_renamed_del_deprecated():
 def test_deprecating_dict_with_renamed_pop_nondeprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
     assert 'a' in d
     with pytest.warns(FutureWarning, match='is deprecated since'):
@@ -315,7 +315,7 @@ def test_deprecating_dict_with_renamed_pop_nondeprecated():
 def test_deprecating_dict_with_renamed_pop_deprecated():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
     with pytest.warns(FutureWarning, match='is deprecated since'):
         assert 'c' in d
@@ -332,7 +332,7 @@ def test_deprecating_dict_with_renamed_pop_deprecated():
 def test_deprecating_dict_with_renamed_copy():
     d = _DeprecatingDict({'a': 1, 'b': 2})
     d.set_deprecated_from_rename(
-        from_name='c', to_name='a', version='v2.0', since_version='v1.6'
+        from_name='c', to_name='a', window='2027-Q1', since_version='v1.6'
     )
 
     e = d.copy()
