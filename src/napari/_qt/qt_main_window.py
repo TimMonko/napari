@@ -171,6 +171,19 @@ def _resize_docks_later(refs: list[ref], sizes: list[int]) -> None:
         window.resizeDocks(docks, sizes, Qt.Orientation.Vertical)
 
 
+def _shown_dock(group: Sequence[QDockWidget]) -> QDockWidget:
+    """The dock a tab group is showing.
+
+    Qt moves background tabs off-screen rather than hiding them, so the
+    shown member is the one with a visible region. A group that has not been
+    laid out yet has no visible member, and the last dock added to it is the
+    tab Qt made current.
+    """
+    return next(
+        (dw for dw in group if not dw.visibleRegion().isEmpty()), group[-1]
+    )
+
+
 class _QtMainWindow(QMainWindow):
     # To track window instances and facilitate getting the "active" viewer...
     # We use this instead of QApplication.activeWindow for compatibility with
@@ -215,6 +228,12 @@ class _QtMainWindow(QMainWindow):
         self._old_size = None
         self._positions = []
         self._docks_to_fit: WeakSet[QtViewerDockWidget] = WeakSet()
+        self._areas_to_fit: set[Qt.DockWidgetArea] = set()
+        # the height the window had before the first fit grew it, so that
+        # closing a dock can give the height back
+        self._height_before_fit: int | None = None
+        # True while a fit is resizing the window itself
+        self._resizing_for_fit = False
         self._toggle_menubar_visibility = False
 
         self._is_close_dialog = {False: True, True: True}
@@ -635,19 +654,32 @@ class _QtMainWindow(QMainWindow):
         event.accept()
 
     def _schedule_fit_docks(self, dock_widget: QtViewerDockWidget) -> None:
-        """Fit ``dock_widget``'s area once Qt has laid it out.
+        """Fit ``dock_widget``'s area once Qt has laid it out."""
+        self._queue_fit()
+        self._docks_to_fit.add(dock_widget)
+
+    def _schedule_fit_area(self, area: Qt.DockWidgetArea) -> None:
+        """Fit ``area`` once Qt has laid out a dock leaving it."""
+        self._queue_fit()
+        self._areas_to_fit.add(area)
+
+    def _queue_fit(self) -> None:
+        """Ask for a fit once Qt has laid out whatever changed.
 
         Requests are coalesced, so adding several docks in a row (or Qt
         emitting several location changes) leads to a single fit.
         """
-        if not self._docks_to_fit:
+        if not self._docks_to_fit and not self._areas_to_fit:
             QTimer.singleShot(0, self._run_fit_docks)
-        self._docks_to_fit.add(dock_widget)
 
     def _run_fit_docks(self) -> None:
         docks = list(self._docks_to_fit)
+        areas = set(self._areas_to_fit)
         self._docks_to_fit.clear()
-        by_area: dict[Qt.DockWidgetArea, list[QtViewerDockWidget]] = {}
+        self._areas_to_fit.clear()
+        by_area: dict[Qt.DockWidgetArea, list[QtViewerDockWidget]] = {
+            area: [] for area in areas
+        }
         # docks may be deleted by the time the timer fires
         with contextlib.suppress(RuntimeError):
             for dw in docks:
@@ -664,8 +696,10 @@ class _QtMainWindow(QMainWindow):
     ) -> list[list[QDockWidget]]:
         """The tab groups of docks in ``area``, top to bottom.
 
-        Closed and floating docks are skipped. Docks that are not laid out yet
-        go last, in the order they were added.
+        Closed and floating docks are skipped. Qt reparents the members of a
+        tab group, so it is not the order docks were added in: rank them by
+        when they were added instead, which is also the order they are
+        stacked in.
         """
 
         def in_area(dw: QDockWidget) -> bool:
@@ -680,31 +714,23 @@ class _QtMainWindow(QMainWindow):
                 )
             )
 
+        # the docks a plugin added, in the order it added them
+        wrapped = list(self._window._wrapped_dock_widgets.values())
+        # the docks napari added itself, which it did before any plugin
+        ordered = [
+            dw for dw in self.findChildren(QDockWidget) if dw not in wrapped
+        ]
+        ordered += wrapped
+
         groups: list[list[QDockWidget]] = []
         seen: set[QDockWidget] = set()
-        for dw in self.findChildren(QDockWidget):
-            if dw not in seen and in_area(dw):
-                group = [dw, *self.tabifiedDockWidgets(dw)]
-                seen.update(group)
-                groups.append(group)
-
-        added = list(self._window._wrapped_dock_widgets.values())
-
-        def position(group: list[QDockWidget]) -> tuple[int, int]:
-            # a just-raised tab may not be laid out yet and report y == 0,
-            # but background tabs keep their place, so take the largest y
-            y = max(dw.y() for dw in group)
-            if y > 0:
-                return (0, y)
-            return (
-                1,
-                min(
-                    (added.index(dw) for dw in group if dw in added),
-                    default=len(added),
-                ),
-            )
-
-        return sorted(groups, key=position)
+        for dw in ordered:
+            if dw in seen or not in_area(dw):
+                continue
+            group = [dw, *self.tabifiedDockWidgets(dw)]
+            seen.update(group)
+            groups.append(group)
+        return groups
 
     def _fit_dock_area(
         self,
@@ -726,16 +752,19 @@ class _QtMainWindow(QMainWindow):
         """
         if not self.isVisible() or (screen := self.screen()) is None:
             return
+        available = screen.availableGeometry()
         groups = self._dock_groups(area, new_docks)
+        if not groups:
+            # the area is empty: give back the height a fit gave it
+            if not new_docks and self._height_before_fit is not None:
+                self._resize_height(self._height_before_fit, available)
+            return
         plugin_docks = [
             dw
             for dw in self._window._wrapped_dock_widgets.values()
             if any(dw in group for group in groups)
         ]
-        if not plugin_docks:
-            return
 
-        available = screen.availableGeometry()
         # a maximized window can't change size: fit docks into its height
         resizable = not (self.isMaximized() or self.isFullScreen())
         frame_extra = self.frameGeometry().height() - self.height()
@@ -759,11 +788,16 @@ class _QtMainWindow(QMainWindow):
         )
         if natural_total <= max_height:
             if resizable:
-                self._resize_height(
-                    max(natural_total, self.height()), available
-                )
+                target = max(natural_total, self.height())
+                # a fit after a dock was removed gives the height back, but
+                # never below where the window was before it was fitted
+                if not new_docks and self._height_before_fit is not None:
+                    target = max(natural_total, self._height_before_fit)
+                self._resize_height(target, available)
             return
 
+        if not plugin_docks:
+            return
         plugin_groups = [
             group
             for group in groups
@@ -796,7 +830,7 @@ class _QtMainWindow(QMainWindow):
             and sum(comfortable(g) + separator for g in plugin_groups) > budget
         ):
             last = plugin_groups.pop()
-            anchor = next(dw for dw in plugin_groups[-1] if dw in plugin_docks)
+            anchor = _shown_dock(plugin_groups[-1])
             for dw in last:
                 self.tabifyDockWidget(anchor, dw)
             plugin_groups[-1].extend(last)
@@ -814,15 +848,7 @@ class _QtMainWindow(QMainWindow):
             new = [dw for dw in group if dw in new_docks]
             if new:
                 new[-1].raise_()
-            shown.append(
-                new[-1]
-                if new
-                else next(
-                    # (Qt moves background tabs off-screen, not hidden)
-                    (dw for dw in group if not dw.visibleRegion().isEmpty()),
-                    group[0],
-                )
-            )
+            shown.append(new[-1] if new else _shown_dock(group))
         if resizable:
             self._resize_height(max_height, available)
         # apply once the window resize has been laid out (weak refs, so the
@@ -834,7 +860,14 @@ class _QtMainWindow(QMainWindow):
         """Resize the window to ``height``, keeping it on screen."""
         if height == self.height():
             return
-        self.resize(self.width(), height)
+        if self._height_before_fit is None and height > self.height():
+            # remember where the window was before we started growing it
+            self._height_before_fit = self.height()
+        self._resizing_for_fit = True
+        try:
+            self.resize(self.width(), height)
+        finally:
+            self._resizing_for_fit = False
         bottom = self.frameGeometry().bottom()
         if bottom > available.bottom():
             self.move(
@@ -844,6 +877,10 @@ class _QtMainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         """Override to handle original size before maximizing."""
+        if not self._resizing_for_fit:
+            # something other than a fit resized the window: the height is
+            # the user's now, so there is nothing left to give back
+            self._height_before_fit = None
         # the first resize event will have nonsense positions that we don't
         # want to store (and potentially restore)
         if event.oldSize().isValid():
@@ -1660,7 +1697,11 @@ class Window:
             _dw._release_inner_widget()
         elif _dw.widget():
             _dw.widget().setParent(None)
+        area = self._qt_window.dockWidgetArea(_dw)
         self._qt_window.removeDockWidget(_dw)
+        if area in _VERTICAL_DOCK_AREAS:
+            # the docks left behind can take the freed height back
+            self._qt_window._schedule_fit_area(area)
         if menu is not None:
             menu.removeAction(_dw.toggleViewAction())
 

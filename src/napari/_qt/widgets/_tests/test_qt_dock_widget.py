@@ -4,6 +4,7 @@ from qtpy.QtWidgets import (
     QDockWidget,
     QHBoxLayout,
     QPushButton,
+    QTabBar,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -379,6 +380,52 @@ def test_tall_docks_get_a_quarter_of_the_area_before_tabifying(
     assert len(shown) == 4
     # roughly a quarter of the area each, comfortably above the 200px floor
     qtbot.waitUntil(lambda: all(dw.height() > 230 for dw in shown))
+
+
+def test_tabs_are_added_in_the_order_the_docks_were_added(
+    make_napari_viewer, fake_screen, qtbot
+):
+    """Tabs keep to one order, so a new tab isn't inserted at random.
+
+    Qt reparents the members of a tab group, so reading a group back gives
+    its docks in no particular order: which one ``_dock_groups`` saw first
+    decided where the next tab went, and that changed between runs.
+    """
+    viewer = make_napari_viewer(show=True)
+    qt_window = viewer.window._qt_window
+    fake_screen(1200)
+
+    _add_docks(viewer, qtbot, [_tall_widget(800) for _ in range(6)])
+    area = Qt.DockWidgetArea.RightDockWidgetArea
+    groups = qt_window._dock_groups(area, ())
+
+    assert [[dw.objectName() for dw in group] for group in groups] == [
+        ['w0'],
+        ['w1'],
+        ['w2'],
+        ['w3', 'w4', 'w5'],
+    ]
+    (tab_bar,) = qt_window.findChildren(QTabBar)
+    assert [tab_bar.tabText(i) for i in range(tab_bar.count())] == [
+        'w3',
+        'w4',
+        'w5',
+    ]
+
+
+def test_closing_a_dock_gives_the_window_height_back(
+    make_napari_viewer, fake_screen, qtbot
+):
+    viewer = make_napari_viewer(show=True)
+    qt_window = viewer.window._qt_window
+    fake_screen(10_000)
+    height = qt_window.height()
+
+    (dw,) = _add_docks(viewer, qtbot, [_tall_widget(height + 400)])
+    qtbot.waitUntil(lambda: qt_window.height() > height)
+
+    viewer.window.remove_dock_widget(dw)
+    qtbot.waitUntil(lambda: qt_window.height() == height)
 
 
 def test_new_dock_gets_more_than_its_minimum(
