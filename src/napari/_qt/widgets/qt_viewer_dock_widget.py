@@ -172,11 +172,13 @@ class QtViewerDockWidget(QDockWidget):
         title = self.titleBarWidget()
         return title.sizeHint().height() if title is not None else 0
 
-    def _natural_height(self, prefer_size_hint: bool = False) -> int:
+    def natural_height(self, *, prefer_size_hint: bool = False) -> int:
         """Height this dock needs to show its widget without scrolling.
 
-        With ``prefer_size_hint``, use the widget's preferred size when it is
-        larger than its minimum (used for newly added docks).
+        The window asks for this while it fits the docks stacked in an area,
+        so this is the dock's own answer to how much room it wants. With
+        ``prefer_size_hint``, ask for the widget's preferred size rather than
+        its minimum, which is what a newly added dock is given.
         """
         inner = self.widget()
         if inner is None:

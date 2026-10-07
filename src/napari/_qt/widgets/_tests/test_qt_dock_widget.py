@@ -431,9 +431,11 @@ def test_closing_a_dock_gives_the_window_height_back(
 def test_new_dock_gets_more_than_its_minimum(
     make_napari_viewer, fake_screen, qtbot
 ):
+    """The dock just added is given the height it asks for, not the floor."""
     viewer = make_napari_viewer(show=True)
     fake_screen(1200)
 
+    # two docks in the stack leave room for the third to be shown in full
     *old, new = _add_docks(
         viewer, qtbot, [_tall_widget(800) for _ in range(3)]
     )
@@ -471,32 +473,3 @@ def test_docks_can_still_move_between_areas(make_napari_viewer, qtbot):
     assert qt_window.dockWidgetArea(dw) == Qt.DockWidgetArea.LeftDockWidgetArea
     assert widg.parent() is dw
     assert dw.widget() is widg
-
-
-@pytest.mark.parametrize(
-    ('minimums', 'wants', 'priority', 'space', 'expected'),
-    [
-        # everyone gets their minimum, the new dock grows first
-        (
-            [100, 100, 100],
-            [500, 500, 500],
-            [False, False, True],
-            500,
-            [100, 100, 300],
-        ),
-        # leftovers go to the others, by how much more they want
-        (
-            [100, 100, 100],
-            [300, 200, 150],
-            [False, False, True],
-            500,
-            [200, 150, 150],
-        ),
-        # not even the minimums fit: minimums are kept
-        ([200, 200], [400, 400], [True, False], 300, [200, 200]),
-    ],
-)
-def test_share_space(minimums, wants, priority, space, expected):
-    from napari._qt.qt_main_window import _share_space
-
-    assert _share_space(minimums, wants, priority, space) == expected
