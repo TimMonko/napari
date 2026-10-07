@@ -250,3 +250,206 @@ def test_combine_widgets_error():
         TypeError, match='"widgets" must be a QWidget, a magicgui'
     ):
         combine_widgets(['string'])
+
+
+def _tall_widget(height):
+    widg = QWidget()
+    widg.setLayout(QVBoxLayout())
+    spacer = QWidget()
+    spacer.setFixedHeight(height)
+    widg.layout().addWidget(spacer)
+    return widg
+
+
+@pytest.fixture
+def fake_screen(monkeypatch):
+    """Pretend the screen has a fixed available height."""
+    from types import SimpleNamespace
+
+    from qtpy.QtCore import QRect
+
+    from napari._qt.qt_main_window import _QtMainWindow
+
+    def _set(height):
+        screen = SimpleNamespace(
+            availableGeometry=lambda: QRect(0, 0, 3000, height)
+        )
+        monkeypatch.setattr(_QtMainWindow, 'screen', lambda self: screen)
+
+    return _set
+
+
+def _add_docks(viewer, qtbot, widgets, area='right'):
+    docks = []
+    for i, widg in enumerate(widgets):
+        qtbot.addWidget(widg)
+        docks.append(
+            viewer.window.add_dock_widget(widg, name=f'w{i}', area=area)
+        )
+        qtbot.wait(50)
+    qtbot.wait(100)
+    return docks
+
+
+def _stacked_groups(qt_window, docks):
+    groups = {
+        frozenset([dw, *qt_window.tabifiedDockWidgets(dw)]) for dw in docks
+    }
+    return len(groups)
+
+
+def test_plugin_dock_is_scrollable_but_transparent(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer()
+    widg = QPushButton('button')
+    qtbot.addWidget(widg)
+    dw = viewer.window.add_dock_widget(widg, name='test', area='right')
+
+    assert dw._scroll_area is not None
+    assert dw.widget() is widg
+    assert widg.parent() is dw
+    assert viewer.window.dock_widgets['test'] is widg
+    # small widgets aren't squished: the dock can't shrink below them
+    assert dw.minimumSizeHint().height() >= widg.minimumSizeHint().height()
+
+    # napari's own docks are not wrapped
+    assert viewer.window._qt_viewer.dockLayerList._scroll_area is None
+
+
+def test_tall_dock_widget_grows_window(make_napari_viewer, fake_screen, qtbot):
+    viewer = make_napari_viewer(show=True)
+    qt_window = viewer.window._qt_window
+    fake_screen(10_000)
+    height = qt_window.height()
+
+    _add_docks(viewer, qtbot, [_tall_widget(height + 400)])
+    qtbot.waitUntil(lambda: qt_window.height() > height + 300)
+
+
+def test_short_dock_widget_keeps_window_height(
+    make_napari_viewer, fake_screen, qtbot
+):
+    viewer = make_napari_viewer(show=True)
+    qt_window = viewer.window._qt_window
+    fake_screen(10_000)
+    height = qt_window.height()
+
+    _add_docks(viewer, qtbot, [_tall_widget(20)])
+    assert qt_window.height() == height
+
+
+def test_dock_widget_too_tall_for_screen_scrolls(
+    make_napari_viewer, fake_screen, qtbot
+):
+    viewer = make_napari_viewer(show=True)
+    qt_window = viewer.window._qt_window
+    height = qt_window.height()
+    fake_screen(height + 100)
+
+    widg = _tall_widget(height * 3)
+    qtbot.addWidget(widg)
+    dw = viewer.window.add_dock_widget(widg, name='tall', area='right')
+    qtbot.wait(200)
+
+    # the window never grows past the screen; the dock scrolls instead
+    assert qt_window.height() <= height + 100
+    assert dw.height() < widg.minimumSizeHint().height()
+    assert dw._scroll_area.verticalScrollBar().maximum() > 0
+    # lookups through the wrapper still behave
+    assert viewer.window.dock_widgets['tall'] is widg
+    assert widg.parent() is dw
+    assert dw.inner_widget() is widg
+
+    viewer.window.remove_dock_widget(widg)
+    assert not widg.parent()
+    assert 'tall' not in viewer.window.dock_widgets
+
+
+def test_tall_docks_get_a_quarter_of_the_area_before_tabifying(
+    make_napari_viewer, fake_screen, qtbot
+):
+    viewer = make_napari_viewer(show=True)
+    qt_window = viewer.window._qt_window
+    fake_screen(1200)
+
+    docks = _add_docks(viewer, qtbot, [_tall_widget(800) for _ in range(6)])
+    assert _stacked_groups(qt_window, docks) == 4
+    assert qt_window.height() <= 1200
+    # (Qt moves background tabs off-screen rather than hiding them)
+    shown = [dw for dw in docks if not dw.visibleRegion().isEmpty()]
+    assert len(shown) == 4
+    # roughly a quarter of the area each, comfortably above the 200px floor
+    qtbot.waitUntil(lambda: all(dw.height() > 230 for dw in shown))
+
+
+def test_new_dock_gets_more_than_its_minimum(
+    make_napari_viewer, fake_screen, qtbot
+):
+    viewer = make_napari_viewer(show=True)
+    fake_screen(1200)
+
+    *old, new = _add_docks(
+        viewer, qtbot, [_tall_widget(800) for _ in range(3)]
+    )
+    qtbot.waitUntil(lambda: all(new.height() > dw.height() for dw in old))
+
+
+def test_small_docks_keep_their_height_in_an_overflowing_area(
+    make_napari_viewer, fake_screen, qtbot
+):
+    viewer = make_napari_viewer(show=True)
+    qt_window = viewer.window._qt_window
+    fake_screen(1200)
+
+    widgets = [_tall_widget(800) for _ in range(3)]
+    widgets += [QPushButton(f'button {i}') for i in range(2)]
+    docks = _add_docks(viewer, qtbot, widgets)
+    small = docks[3:]
+
+    # small docks aren't squished below their real height...
+    assert all(
+        dw.height() >= dw.widget().minimumSizeHint().height() for dw in small
+    )
+    # ...and only take that much room, so all five fit stacked
+    assert _stacked_groups(qt_window, docks) == 5
+
+
+def test_docks_can_still_move_between_areas(make_napari_viewer, qtbot):
+    viewer = make_napari_viewer(show=True)
+    qt_window = viewer.window._qt_window
+    widg = _tall_widget(300)
+    (dw,) = _add_docks(viewer, qtbot, [widg])
+
+    qt_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dw)
+    qtbot.wait(100)
+    assert qt_window.dockWidgetArea(dw) == Qt.DockWidgetArea.LeftDockWidgetArea
+    assert widg.parent() is dw
+    assert dw.widget() is widg
+
+
+@pytest.mark.parametrize(
+    ('minimums', 'wants', 'priority', 'space', 'expected'),
+    [
+        # everyone gets their minimum, the new dock grows first
+        (
+            [100, 100, 100],
+            [500, 500, 500],
+            [False, False, True],
+            500,
+            [100, 100, 300],
+        ),
+        # leftovers go to the others, by how much more they want
+        (
+            [100, 100, 100],
+            [300, 200, 150],
+            [False, False, True],
+            500,
+            [200, 150, 150],
+        ),
+        # not even the minimums fit: minimums are kept
+        ([200, 200], [400, 400], [True, False], 300, [200, 200]),
+    ],
+)
+def test_share_space(minimums, wants, priority, space, expected):
+    from napari._qt.qt_main_window import _share_space
+
+    assert _share_space(minimums, wants, priority, space) == expected

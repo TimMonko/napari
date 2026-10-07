@@ -12,6 +12,7 @@ import os
 import sys
 import time
 import warnings
+from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -21,7 +22,7 @@ from typing import (
     Union,
     cast,
 )
-from weakref import WeakValueDictionary
+from weakref import WeakSet, WeakValueDictionary, ref
 
 from qtpy import QT5
 from qtpy.QtCore import (
@@ -32,6 +33,7 @@ from qtpy.QtCore import (
     QRect,
     QSize,
     Qt,
+    QTimer,
     Slot,
 )
 from qtpy.QtGui import QImage
@@ -120,6 +122,55 @@ MenuStr = Literal[
 ]
 
 
+# When a left/right dock area overflows, plugin docks are not automatically
+# squished below this fraction of the area's height (or _SCROLL_DOCK_FLOOR,
+# whichever is larger); docks smaller than that keep their real height. Users
+# can still shrink docks further by hand (see QtViewerDockWidget scrollable).
+_SCROLL_DOCK_MIN_FRACTION = 1 / 4
+_SCROLL_DOCK_FLOOR = 200
+_VERTICAL_DOCK_AREAS = (
+    Qt.DockWidgetArea.LeftDockWidgetArea,
+    Qt.DockWidgetArea.RightDockWidgetArea,
+)
+
+
+def _share_space(
+    minimums: Sequence[int],
+    wants: Sequence[int],
+    priority: Sequence[bool],
+    space: int,
+) -> list[int]:
+    """Split ``space`` between docks stacked in an area.
+
+    Every dock gets its minimum. Docks with ``priority`` (newly added ones)
+    then grow towards the size they want, and whatever is left is shared by
+    the others in proportion to how much more they want.
+    """
+    sizes = list(minimums)
+    missing = [max(w - m, 0) for w, m in zip(wants, minimums, strict=True)]
+    spare = space - sum(sizes)
+    for i, first in enumerate(priority):
+        if first and spare > 0:
+            extra = min(spare, missing[i])
+            sizes[i] += extra
+            missing[i] -= extra
+            spare -= extra
+    total_missing = sum(missing)
+    if spare > 0 and total_missing:
+        for i, m in enumerate(missing):
+            sizes[i] += spare * m // total_missing
+    return sizes
+
+
+def _resize_docks_later(refs: list[ref], sizes: list[int]) -> None:
+    """``resizeDocks`` with weak references to the window and docks."""
+    window, *docks = (r() for r in refs)
+    if window is None or any(d is None for d in docks):
+        return
+    with contextlib.suppress(RuntimeError):
+        window.resizeDocks(docks, sizes, Qt.Orientation.Vertical)
+
+
 class _QtMainWindow(QMainWindow):
     # To track window instances and facilitate getting the "active" viewer...
     # We use this instead of QApplication.activeWindow for compatibility with
@@ -163,6 +214,7 @@ class _QtMainWindow(QMainWindow):
         self._window_pos = None
         self._old_size = None
         self._positions = []
+        self._docks_to_fit: WeakSet[QtViewerDockWidget] = WeakSet()
         self._toggle_menubar_visibility = False
 
         self._is_close_dialog = {False: True, True: True}
@@ -581,6 +633,214 @@ class _QtMainWindow(QMainWindow):
             self._qt_viewer.canvas._scene_canvas.events.key_release, event
         )
         event.accept()
+
+    def _schedule_fit_docks(self, dock_widget: QtViewerDockWidget) -> None:
+        """Fit ``dock_widget``'s area once Qt has laid it out.
+
+        Requests are coalesced, so adding several docks in a row (or Qt
+        emitting several location changes) leads to a single fit.
+        """
+        if not self._docks_to_fit:
+            QTimer.singleShot(0, self._run_fit_docks)
+        self._docks_to_fit.add(dock_widget)
+
+    def _run_fit_docks(self) -> None:
+        docks = list(self._docks_to_fit)
+        self._docks_to_fit.clear()
+        by_area: dict[Qt.DockWidgetArea, list[QtViewerDockWidget]] = {}
+        # docks may be deleted by the time the timer fires
+        with contextlib.suppress(RuntimeError):
+            for dw in docks:
+                area = self.dockWidgetArea(dw)
+                if area in _VERTICAL_DOCK_AREAS and not dw.isFloating():
+                    by_area.setdefault(area, []).append(dw)
+            for area, new_docks in by_area.items():
+                self._fit_dock_area(area, new_docks)
+
+    def _dock_groups(
+        self,
+        area: Qt.DockWidgetArea,
+        new_docks: Sequence[QtViewerDockWidget],
+    ) -> list[list[QDockWidget]]:
+        """The tab groups of docks in ``area``, top to bottom.
+
+        Closed and floating docks are skipped. Docks that are not laid out yet
+        go last, in the order they were added.
+        """
+
+        def in_area(dw: QDockWidget) -> bool:
+            return (
+                not dw.isFloating()
+                and self.dockWidgetArea(dw) == area
+                # shown, about to be shown, or a background tab
+                and (
+                    dw.isVisible()
+                    or dw in new_docks
+                    or any(t.isVisible() for t in self.tabifiedDockWidgets(dw))
+                )
+            )
+
+        groups: list[list[QDockWidget]] = []
+        seen: set[QDockWidget] = set()
+        for dw in self.findChildren(QDockWidget):
+            if dw not in seen and in_area(dw):
+                group = [dw, *self.tabifiedDockWidgets(dw)]
+                seen.update(group)
+                groups.append(group)
+
+        added = list(self._window._wrapped_dock_widgets.values())
+
+        def position(group: list[QDockWidget]) -> tuple[int, int]:
+            # a just-raised tab may not be laid out yet and report y == 0,
+            # but background tabs keep their place, so take the largest y
+            y = max(dw.y() for dw in group)
+            if y > 0:
+                return (0, y)
+            return (
+                1,
+                min(
+                    (added.index(dw) for dw in group if dw in added),
+                    default=len(added),
+                ),
+            )
+
+        return sorted(groups, key=position)
+
+    def _fit_dock_area(
+        self,
+        area: Qt.DockWidgetArea,
+        new_docks: Sequence[QtViewerDockWidget],
+    ) -> None:
+        """Fit the docks in a left/right area to the window height.
+
+        Plugin docks scroll, so they never force the window past the screen.
+
+        1. The window grows (up to the screen height) so every dock can be
+           shown at its natural height.
+        2. If that isn't enough, each plugin dock keeps a comfortable height:
+           its natural height, or ``_SCROLL_DOCK_MIN_FRACTION`` of the area
+           (at least ``_SCROLL_DOCK_FLOOR``) if it is taller than that. Groups
+           that still don't fit are tabified into the last one that does.
+        3. New docks get extra space first (up to their natural height), and
+           what is left is shared by the others.
+        """
+        if not self.isVisible() or (screen := self.screen()) is None:
+            return
+        groups = self._dock_groups(area, new_docks)
+        plugin_docks = [
+            dw
+            for dw in self._window._wrapped_dock_widgets.values()
+            if any(dw in group for group in groups)
+        ]
+        if not plugin_docks:
+            return
+
+        available = screen.availableGeometry()
+        # a maximized window can't change size: fit docks into its height
+        resizable = not (self.isMaximized() or self.isFullScreen())
+        frame_extra = self.frameGeometry().height() - self.height()
+        max_height = (
+            available.height() - frame_extra if resizable else self.height()
+        )
+        # window chrome above/below the dock area (menu bar, status bar, ...)
+        chrome = self.height() - self.centralWidget().height()
+        style = self.style()
+        separator = style.pixelMetric(
+            style.PixelMetric.PM_DockWidgetSeparatorExtent
+        )
+
+        def natural(dw: QDockWidget) -> int:
+            if dw in plugin_docks:
+                return dw._natural_height(prefer_size_hint=dw in new_docks)
+            return dw.minimumSizeHint().height()
+
+        natural_total = chrome + sum(
+            max(natural(dw) for dw in group) + separator for group in groups
+        )
+        if natural_total <= max_height:
+            if resizable:
+                self._resize_height(
+                    max(natural_total, self.height()), available
+                )
+            return
+
+        plugin_groups = [
+            group
+            for group in groups
+            if any(dw in plugin_docks for dw in group)
+        ]
+        core_height = sum(
+            max(dw.minimumSizeHint().height() for dw in group) + separator
+            for group in groups
+            if group not in plugin_groups
+        )
+        budget = max_height - chrome - core_height
+        title = max(dw._title_height() for dw in plugin_docks)
+        # (each stacked dock also needs its title bar and a separator)
+        floor = max(
+            _SCROLL_DOCK_FLOOR,
+            int(budget * _SCROLL_DOCK_MIN_FRACTION) - separator - title,
+        )
+
+        def comfortable(group: list[QDockWidget]) -> int:
+            return max(
+                min(dw._natural_height(), floor + title)
+                if dw in plugin_docks
+                else dw.minimumSizeHint().height()
+                for dw in group
+            )
+
+        # tabify groups that don't fit into the last group that does
+        while (
+            len(plugin_groups) > 1
+            and sum(comfortable(g) + separator for g in plugin_groups) > budget
+        ):
+            last = plugin_groups.pop()
+            anchor = next(dw for dw in plugin_groups[-1] if dw in plugin_docks)
+            for dw in last:
+                self.tabifyDockWidget(anchor, dw)
+            plugin_groups[-1].extend(last)
+
+        sizes = _share_space(
+            minimums=[comfortable(g) for g in plugin_groups],
+            wants=[max(natural(dw) for dw in g) for g in plugin_groups],
+            priority=[any(dw in new_docks for dw in g) for g in plugin_groups],
+            space=budget - separator * len(plugin_groups),
+        )
+        # resizeDocks takes one dock per group: the tab that is shown, which
+        # for groups with a new dock is that new dock
+        shown = []
+        for group in plugin_groups:
+            new = [dw for dw in group if dw in new_docks]
+            if new:
+                new[-1].raise_()
+            shown.append(
+                new[-1]
+                if new
+                else next(
+                    # (Qt moves background tabs off-screen, not hidden)
+                    (dw for dw in group if not dw.visibleRegion().isEmpty()),
+                    group[0],
+                )
+            )
+        if resizable:
+            self._resize_height(max_height, available)
+        # apply once the window resize has been laid out (weak refs, so the
+        # timer doesn't keep the window or docks alive)
+        refs = [ref(self), *(ref(dw) for dw in shown)]
+        QTimer.singleShot(0, partial(_resize_docks_later, refs, sizes))
+
+    def _resize_height(self, height: int, available: QRect) -> None:
+        """Resize the window to ``height``, keeping it on screen."""
+        if height == self.height():
+            return
+        self.resize(self.width(), height)
+        bottom = self.frameGeometry().bottom()
+        if bottom > available.bottom():
+            self.move(
+                self.x(),
+                max(available.top(), self.y() - (bottom - available.bottom())),
+            )
 
     def resizeEvent(self, event):
         """Override to handle original size before maximizing."""
@@ -1211,6 +1471,7 @@ class Window:
                 allowed_areas=allowed_areas,
                 shortcut=shortcut,
                 add_vertical_stretch=add_vertical_stretch,
+                scrollable=True,
             )
         else:
             dock_widget = QtViewerDockWidget(
@@ -1220,6 +1481,7 @@ class Window:
                 area=area,
                 allowed_areas=allowed_areas,
                 add_vertical_stretch=add_vertical_stretch,
+                scrollable=True,
             )
 
         self._add_viewer_dock_widget(dock_widget, tabify=tabify, menu=menu)
@@ -1311,20 +1573,29 @@ class Window:
         self._qt_window.addDockWidget(dock_widget.qt_area, dock_widget)
 
         # If another dock widget present in area then tabify
-        if current_dws_in_area:
-            if tabify:
-                self._qt_window.tabifyDockWidget(
-                    current_dws_in_area[-1], dock_widget
-                )
-                dock_widget.show()
-                dock_widget.raise_()
-            elif dock_widget.area in ('right', 'left'):
-                _wdg = [*current_dws_in_area, dock_widget]
-                # add sizes to push lower widgets up
-                sizes = list(range(1, len(_wdg) * 4, 4))
-                self._qt_window.resizeDocks(
-                    _wdg, sizes, Qt.Orientation.Vertical
-                )
+        if current_dws_in_area and tabify:
+            self._qt_window.tabifyDockWidget(
+                current_dws_in_area[-1], dock_widget
+            )
+            dock_widget.show()
+            dock_widget.raise_()
+
+        # Fit the area once Qt has shown the dock (a just-added dock still
+        # reports as hidden), and again whenever it is moved or re-tabified.
+        qt_window_ref = ref(self._qt_window)
+        dock_ref = ref(dock_widget)
+
+        def _schedule_fit(*_):
+            qt_window, dw = qt_window_ref(), dock_ref()
+            if qt_window is not None and dw is not None:
+                qt_window._schedule_fit_docks(dw)
+
+        dock_widget.dockLocationChanged.connect(_schedule_fit)
+        # (the built-in docks are added before the window is shown)
+        if dock_widget.area in ('right', 'left') and (
+            self._qt_window.isVisible()
+        ):
+            _schedule_fit()
 
         if menu:
             action = dock_widget.toggleViewAction()
@@ -1385,7 +1656,9 @@ class Window:
         else:
             _dw = widget
 
-        if _dw.widget():
+        if isinstance(_dw, QtViewerDockWidget):
+            _dw._release_inner_widget()
+        elif _dw.widget():
             _dw.widget().setParent(None)
         self._qt_window.removeDockWidget(_dw)
         if menu is not None:

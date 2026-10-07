@@ -1,11 +1,12 @@
 import warnings
+from contextlib import suppress
 from functools import reduce
 from itertools import count
 from operator import ior
 from typing import TYPE_CHECKING, Union
 from weakref import ReferenceType, ref
 
-from qtpy.QtCore import QCoreApplication, QEvent, Qt
+from qtpy.QtCore import QCoreApplication, QEvent, QSize, Qt
 from qtpy.QtGui import QFontMetrics
 from qtpy.QtWidgets import (
     QDockWidget,
@@ -13,6 +14,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -27,6 +29,8 @@ if TYPE_CHECKING:
     from napari._qt.qt_viewer import QtViewer
 
 counter = count()
+# a scrollable dock can be shrunk to this height (or its widget's minimum)
+SCROLL_MIN_HEIGHT = 100
 _sentinel = object()
 
 _SHORTCUT_DEPRECATION_STRING = f'The shortcut parameter is deprecated since version 0.4.8, please use the action and shortcut manager APIs. The new action manager and shortcut API allow user configuration and localisation. (got {"{shortcut}"})'
@@ -68,6 +72,11 @@ class QtViewerDockWidget(QDockWidget):
         Whether to add stretch to the bottom of vertical widgets (pushing
         widgets up towards the top of the allotted area, instead of letting
         them distribute across the vertical space).  By default, True.
+    scrollable : bool, optional
+        Whether to show the widget in a scroll area, so the dock can be
+        shrunk below the widget's minimum height. The widget still reports
+        this dock as its ``parent()`` and is returned by ``widget()``.
+        By default, False.
     """
 
     def __init__(
@@ -82,6 +91,7 @@ class QtViewerDockWidget(QDockWidget):
         object_name: str = '',
         add_vertical_stretch=True,
         close_btn=True,
+        scrollable: bool = False,
     ) -> None:
         self._ref_qt_viewer: ReferenceType[QtViewer] = ref(qt_viewer)
         super().__init__(name)
@@ -126,6 +136,10 @@ class QtViewerDockWidget(QDockWidget):
         # FIXME:
         self.setObjectName(object_name or name)
 
+        self._scroll_area: _DockScrollArea | None = (
+            _DockScrollArea() if scrollable else None
+        )
+        self._prev_autofill = False
         is_vertical = area in {'left', 'right'}
         widget_ = combine_widgets(widget, vertical=is_vertical)
         self.setWidget(widget_)
@@ -147,6 +161,52 @@ class QtViewerDockWidget(QDockWidget):
         self.topLevelChanged.connect(self._update_title_bar)
 
         self.dockLocationChanged.connect(self._update_default_dock_area)
+
+    def widget(self) -> QWidget | None:
+        """The docked widget (looking through the scroll area, if any)."""
+        if self._scroll_area is not None:
+            return self._scroll_area.widget()
+        return super().widget()
+
+    def _title_height(self) -> int:
+        title = self.titleBarWidget()
+        return title.sizeHint().height() if title is not None else 0
+
+    def _natural_height(self, prefer_size_hint: bool = False) -> int:
+        """Height this dock needs to show its widget without scrolling.
+
+        With ``prefer_size_hint``, use the widget's preferred size when it is
+        larger than its minimum (used for newly added docks).
+        """
+        inner = self.widget()
+        if inner is None:
+            return self._title_height()
+        height = inner.minimumSizeHint().height()
+        if prefer_size_hint:
+            height = max(height, inner.sizeHint().height())
+        return height + self._title_height()
+
+    def _refresh_size_hints(self) -> None:
+        # An explicit minimum size beats minimumSizeHint in layouts, so keep
+        # the dock's minimum in sync with what the scroll area allows.
+        if self._scroll_area is not None:
+            self.setMinimumHeight(
+                self._scroll_area.minimumSizeHint().height()
+                + self._title_height()
+            )
+        self.updateGeometry()
+
+    def _release_inner_widget(self) -> None:
+        """Detach the docked widget, undoing the scroll area wrapping."""
+        inner = self.widget()
+        if inner is None:
+            return
+        if self._scroll_area is not None:
+            self._scroll_area.takeWidget()
+            with suppress(AttributeError):
+                del inner.parent
+            inner.setAutoFillBackground(self._prev_autofill)
+        inner.setParent(None)
 
     def inner_widget(self) -> 'QWidget | Widget':
         """The inner widget of the dock widget.
@@ -346,7 +406,65 @@ class QtViewerDockWidget(QDockWidget):
     def setWidget(self, widget):
         widget._parent = self
         self.setFocusProxy(widget)
-        super().setWidget(widget)
+        if self._scroll_area is None:
+            super().setWidget(widget)
+            return
+        if super().widget() is not self._scroll_area:
+            super().setWidget(self._scroll_area)
+        # (QScrollArea.setWidget would delete a previous widget)
+        self._scroll_area.takeWidget()
+        self._prev_autofill = widget.autoFillBackground()
+        self._scroll_area.setWidget(widget)
+        # Plugins use `widget.parent()` to find the dock, so keep returning
+        # it rather than the scroll area's viewport (Python callers only).
+        dock_ref = ref(self)
+        with suppress(AttributeError, TypeError):
+            widget.parent = dock_ref
+        self._refresh_size_hints()
+
+
+class _DockScrollArea(QScrollArea):
+    """Scroll area for a dock widget's contents.
+
+    Unlike a plain ``QScrollArea``, its preferred size is the full size of its
+    widget (so docks get their natural size when there is room), and its
+    minimum height is at most ``SCROLL_MIN_HEIGHT`` (so docks can be shrunk
+    and scrolled when there isn't). The minimum width is the widget's, so
+    only vertical scrolling is needed.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+
+    def sizeHint(self) -> QSize:
+        widget = self.widget()
+        if widget is None:
+            return super().sizeHint()
+        frame = 2 * self.frameWidth()
+        hint = widget.sizeHint().expandedTo(widget.minimumSizeHint())
+        return hint + QSize(frame, frame)
+
+    def minimumSizeHint(self) -> QSize:
+        widget = self.widget()
+        if widget is None:
+            return super().minimumSizeHint()
+        frame = 2 * self.frameWidth()
+        minimum = widget.minimumSizeHint()
+        return QSize(
+            minimum.width() + self.verticalScrollBar().sizeHint().width(),
+            min(minimum.height(), SCROLL_MIN_HEIGHT),
+        ) + QSize(frame, frame)
+
+    def eventFilter(self, obj, event) -> bool:
+        # re-read the widget's size hints when its layout changes
+        if obj is self.widget() and event.type() == QEvent.Type.LayoutRequest:
+            self.updateGeometry()
+            dock = self.parent()
+            if isinstance(dock, QtViewerDockWidget):
+                dock._refresh_size_hints()
+        return super().eventFilter(obj, event)
 
 
 class QtCustomTitleBar(QLabel):
