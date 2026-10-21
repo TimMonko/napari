@@ -519,6 +519,9 @@ class VispyCanvas:
         if event.pos is None:
             return
 
+        if self._lost_release(event):
+            self._recover_lost_release(event)
+
         # ensure that events which began in a specific viewbox continue to be
         # calculated based on that viewbox's coordinates
         if event.press_event is not None:
@@ -534,18 +537,6 @@ class VispyCanvas:
             return
 
         canvas_position = tuple(event.pos[::-1])
-
-        if (
-            event.type == 'mouse_press'
-            and event.last_event is not None
-            and event.last_event.type != 'mouse_release'
-            and event.buttons == event.last_event.buttons
-        ):
-            # something went wrong and we lost the mouse release. Make an artificial one here
-            # based on this same event, which will go through this whole machinery first.
-            # We use the native event so that the whole vispy machinery tracking previous
-            # events kicks in properly. Ideally this should be done by us eventually.
-            self._scene_canvas.native.mouseReleaseEvent(event.native)
 
         napari_event = NapariMouseEvent(
             event=event,
@@ -575,6 +566,38 @@ class VispyCanvas:
             mouse_callbacks(layer, read_only_event)
 
         event.handled = napari_event.handled
+
+    @staticmethod
+    def _lost_release(event: MouseEvent) -> bool:
+        """Whether vispy still tracks a drag whose button was released.
+
+        This happens when the release is delivered elsewhere, e.g. to a
+        dialog that opened mid-drag.
+        """
+        press_event = event.press_event
+        if press_event is None or not press_event.button:
+            return False
+        if event.type == 'mouse_press':
+            # the button that started the drag cannot be pressed again
+            return event.button == press_event.button
+        if event.type == 'mouse_move':
+            return press_event.button not in event.buttons
+        return False
+
+    def _recover_lost_release(self, event: MouseEvent) -> None:
+        """Release the lost button, then handle `event` outside the drag."""
+        button = event.press_event.button
+        # go through the backend so that vispy also forgets the drag
+        self._scene_canvas._backend._vispy_mouse_release(
+            native=None,
+            pos=event.pos,
+            button=button,
+            buttons=[b for b in event.buttons if b != button],
+            modifiers=event.modifiers,
+        )
+        # the event was created before the release, so drop its stale history
+        event._press_event = None
+        event._last_event = None
 
     def _on_mouse_double_click(self, event: MouseEvent) -> None:
         """Called whenever a mouse double-click happen on the canvas

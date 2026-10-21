@@ -304,6 +304,53 @@ def test_transform_box():
     assert layer.affine == layer._initial_affine
 
 
+def _drag_log(viewer):
+    log = []
+
+    @viewer.mouse_drag_callbacks.append
+    def drag(viewer, event):
+        log.append(event.type)
+        yield
+        while event.type == 'mouse_move':
+            yield
+        log.append(event.type)
+
+    return log
+
+
+@pytest.mark.parametrize(
+    ('event_type', 'kwargs'),
+    [
+        ('mouse_move', {'buttons': []}),
+        ('mouse_press', {'button': 1, 'buttons': [1]}),
+    ],
+)
+def test_lost_release_is_recovered(make_napari_viewer, event_type, kwargs):
+    """A release lost to e.g. a dialog is replayed on the next event."""
+    viewer = make_napari_viewer()
+    backend = viewer.window._qt_viewer.canvas._scene_canvas._backend
+    log = _drag_log(viewer)
+
+    backend._vispy_mouse_press(
+        native=None, pos=(10, 10), button=1, buttons=[1], modifiers=()
+    )
+    assert log == ['mouse_press']
+
+    # the release never arrives; the next event reveals the button is up
+    backend._last_time = 0  # skip the move throttle
+    getattr(backend, f'_vispy_{event_type}')(
+        native=None, pos=(20, 20), modifiers=(), **kwargs
+    )
+    assert log[:2] == ['mouse_press', 'mouse_release']
+    if event_type == 'mouse_move':
+        assert backend._vispy_mouse_data['press_event'] is None
+    else:
+        # the press starts a fresh drag
+        assert log == ['mouse_press', 'mouse_release', 'mouse_press']
+        press_event = backend._vispy_mouse_data['press_event']
+        assert tuple(press_event.pos) == (20, 20)
+
+
 def test_second_button_keeps_canvas_drag(make_napari_viewer):
     viewer = make_napari_viewer()
     backend = viewer.window._qt_viewer.canvas._scene_canvas._backend
