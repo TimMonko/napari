@@ -194,3 +194,33 @@ def test_new_drag_finishes_stale_drag():
     mouse_press_callbacks(layer, read_only_mouse_event(type='mouse_press'))
     assert log == ['press', 'release', 'press']
     assert len(layer._mouse_drag_gen) == 1
+
+
+def test_failing_move_callback_does_not_stop_drag():
+    layer = Points()
+    log = []
+    layer.mouse_drag_callbacks.append(_drag_logger(log))
+
+    def broken_hover(layer, event):
+        raise ValueError('boom on hover')
+
+    layer.mouse_move_callbacks.append(broken_hover)
+    mouse_press_callbacks(layer, read_only_mouse_event(type='mouse_press'))
+    with pytest.warns(UserWarning, match='boom on hover'):
+        mouse_move_callbacks(
+            layer, read_only_mouse_event(type='mouse_move', is_dragging=True)
+        )
+    assert log == ['press', 'move']
+
+
+def test_failing_generator_setup_warns():
+    layer = Points()
+
+    def drag(layer, event):
+        raise ValueError('boom on press')
+        yield
+
+    layer.mouse_drag_callbacks.append(drag)
+    with pytest.warns(UserWarning, match='boom on press'):
+        mouse_press_callbacks(layer, read_only_mouse_event(type='mouse_press'))
+    assert not layer._mouse_drag_gen

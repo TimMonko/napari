@@ -47,7 +47,11 @@ def _run_callbacks_and_maybe_store_generators(
             continue
 
         # execute function to run it if it is a simple function, or get the generator
-        gen = func(obj, event)
+        try:
+            gen = func(obj, event)
+        except Exception:  # noqa: BLE001
+            _warn_callback_failed(func)
+            continue
         if inspect.isgenerator(gen):
             # if function returns a generator then try to iterate it (the first step should
             # set up the initial state) and set up for later iterations by storing the
@@ -56,6 +60,8 @@ def _run_callbacks_and_maybe_store_generators(
                 next(gen)
             except StopIteration:
                 pass
+            except Exception:  # noqa: BLE001
+                _warn_callback_failed(func)
             else:
                 # The event passed to the generator (and stored here) is actually a wrapper.
                 # On later calls, we just replace the inner wrapped event transparently,
