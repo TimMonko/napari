@@ -144,3 +144,53 @@ def test_failing_close_does_not_leave_generators_registered():
         )
     assert not layer._mouse_drag_gen
     assert not layer._persisted_mouse_event
+
+
+def _dragging(event_type, button, press):
+    return read_only_mouse_event(
+        type=event_type, button=button, is_dragging=True, press_event=press
+    )
+
+
+def test_second_button_does_not_end_drag():
+    """Like vispy, a drag lasts until its own button is released."""
+    layer = Points()
+    log = []
+
+    def drag(layer, event):
+        log.append('press')
+        yield
+        while event.is_dragging:
+            log.append(event.type)
+            yield
+        log.append('done')
+
+    layer.mouse_drag_callbacks.append(drag)
+    press = MouseEvent(type='mouse_press', button=1)
+    mouse_press_callbacks(layer, read_only_mouse_event(**vars(press)))
+    mouse_press_callbacks(layer, _dragging('mouse_press', 2, press))
+    mouse_release_callbacks(layer, _dragging('mouse_release', 2, press))
+    mouse_move_callbacks(layer, _dragging('mouse_move', 1, press))
+    assert log == ['press', 'mouse_press', 'mouse_release', 'mouse_move']
+    assert layer._mouse_drag_gen
+
+    # the release of the button that started the drag ends it
+    release = read_only_mouse_event(
+        type='mouse_release', button=1, press_event=press
+    )
+    mouse_release_callbacks(layer, release)
+    assert log[-1] == 'done'
+    assert not layer._mouse_drag_gen
+
+
+def test_new_drag_finishes_stale_drag():
+    """A drag that lost its release finishes when the next drag starts."""
+    layer = Points()
+    log = []
+    layer.mouse_drag_callbacks.append(_drag_logger(log))
+
+    mouse_press_callbacks(layer, read_only_mouse_event(type='mouse_press'))
+    # the release went elsewhere, e.g. to another layer
+    mouse_press_callbacks(layer, read_only_mouse_event(type='mouse_press'))
+    assert log == ['press', 'release', 'press']
+    assert len(layer._mouse_drag_gen) == 1

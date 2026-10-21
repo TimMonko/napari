@@ -64,6 +64,21 @@ def _run_callbacks_and_maybe_store_generators(
                 obj._persisted_mouse_event[gen] = event
 
 
+def _starts_drag(event: ReadOnlyWrapper[NapariMouseEvent]) -> bool:
+    """Whether this press starts a drag, rather than adding a button to one.
+
+    Follows vispy: a drag starts with the first press and is tracked by its
+    `press_event` until that same button is released.
+    """
+    return getattr(event, 'press_event', None) is None
+
+
+def _ends_drag(event: ReadOnlyWrapper[NapariMouseEvent]) -> bool:
+    """Whether this release ends the drag, rather than lifting another button."""
+    press_event = getattr(event, 'press_event', None)
+    return press_event is None or press_event.button == event.button
+
+
 def _forget_generator(
     obj: MousemapProvider, gen_dict: dict, func: Callable, gen: Generator
 ) -> None:
@@ -210,7 +225,10 @@ def mouse_press_callbacks(
     """Run mouse press callbacks on either layer or viewer object.
 
     Drag callbacks go through this machinery too on setup (since the first
-    step of a drag is a press).
+    step of a drag is a press). Pressing another button during a drag steps
+    the active drag callbacks instead of ending them. A drag still active
+    when a new drag starts has lost its release (e.g. to another layer): it
+    is stepped with the press to let it finish, and closed if it does not.
 
     Note that drag callbacks should have the following form:
 
@@ -237,7 +255,14 @@ def mouse_press_callbacks(
     event : Event
         Mouse event
     """
-    completed = _step_active_generators(obj, event, 'drag')
+    if _starts_drag(event):
+        try:
+            _step_active_generators(obj, event, 'drag')
+        finally:
+            _discard_active_generators(obj, 'drag')
+        completed = []
+    else:
+        completed = _step_active_generators(obj, event, 'drag')
     _run_callbacks_and_maybe_store_generators(
         obj, event, 'drag', ignore=completed
     )
@@ -290,7 +315,10 @@ def mouse_release_callbacks(
 ) -> None:
     """Run mouse release callbacks on either layer or viewer object.
 
-    Drag callbacks go through this machinery at the end.
+    Drag callbacks go through this machinery at the end. Releasing a button
+    other than the one that started the drag steps the drag callbacks
+    without ending them.
+
     Note that drag callbacks should have the following form:
 
 
@@ -320,8 +348,9 @@ def mouse_release_callbacks(
     try:
         _step_active_generators(obj, event, 'drag')
     finally:
-        # drags end on release, finished or not
-        _discard_active_generators(obj, 'drag')
+        if _ends_drag(event):
+            # drags end on release, finished or not
+            _discard_active_generators(obj, 'drag')
 
 
 KEY_SYMBOLS = {

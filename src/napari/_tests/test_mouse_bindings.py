@@ -302,3 +302,35 @@ def test_transform_box():
     next(transform_with_box(layer, event))
     # no interaction has been done so affine should be the same as the initial
     assert layer.affine == layer._initial_affine
+
+
+def test_second_button_keeps_canvas_drag(make_napari_viewer):
+    viewer = make_napari_viewer()
+    backend = viewer.window._qt_viewer.canvas._scene_canvas._backend
+    log = []
+
+    @viewer.mouse_drag_callbacks.append
+    def drag(viewer, event):
+        yield
+        while event.is_dragging:
+            log.append(event.type)
+            yield
+        log.append(f'done on {event.type}')
+
+    def send(name, **kwargs):
+        backend._last_time = 0
+        getattr(backend, f'_vispy_{name}')(
+            native=None, pos=(10, 10), modifiers=(), **kwargs
+        )
+
+    send('mouse_press', button=1, buttons=[1])
+    send('mouse_press', button=2, buttons=[1, 2])
+    send('mouse_release', button=2, buttons=[1])
+    send('mouse_move', buttons=[1])
+    send('mouse_release', button=1, buttons=[])
+    assert log == [
+        'mouse_press',
+        'mouse_release',
+        'mouse_move',
+        'done on mouse_release',
+    ]

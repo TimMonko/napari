@@ -65,3 +65,17 @@ class NapariMouseEvent(MouseEvent):
         self.dims_displayed = dims_displayed
         self.dims_point = dims_point
         self.viewbox = viewbox
+
+    @property
+    def is_dragging(self) -> bool:
+        """Whether this event is part of a mouse drag operation.
+
+        Unlike vispy, the release that ends the drag is not dragging, so that
+        ``while event.is_dragging`` loops end on release.
+        """
+        press_event = self.press_event
+        if press_event is None:
+            return False
+        return not (
+            self.type == 'mouse_release' and self.button == press_event.button
+        )
