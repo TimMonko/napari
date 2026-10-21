@@ -147,6 +147,7 @@ def test_click_during_stroke_pans_then_resumes():
     assert overlay.active is True  # stroke is not aborted
 
     # dragging pans (no painting while dragging)
+    painted = layer.data.copy()
     move = read_only_mouse_event(
         type='mouse_move',
         is_dragging=True,
@@ -154,6 +155,7 @@ def test_click_during_stroke_pans_then_resumes():
     )
     mouse_move_callbacks(layer, move)
     assert layer.mouse_pan is True
+    np.testing.assert_array_equal(layer.data, painted)
 
     # releasing restores panning state and keeps the stroke alive
     release = read_only_mouse_event(

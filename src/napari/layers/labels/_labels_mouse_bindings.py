@@ -99,6 +99,9 @@ class BrushSizeOnMouseMove:
         self.init_brush_size = None
 
     def __call__(self, layer, event) -> None:
+        # hover only: resizing mid-stroke would not apply to the stroke
+        if event.is_dragging:
+            return
         if all(
             modifier in event.modifiers
             for modifier in BRUSH_SIZE_ON_MOUSE_MOVE_MODIFIERS_PARTS

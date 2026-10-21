@@ -55,6 +55,7 @@ class VispyLabelsBrushStrokeOverlay(LayerOverlayMixin, VispySceneOverlay):
         self._stroke_points: list = []
         self._last_coord = None
         self._has_left = False
+        self._panning = False
 
         self.layer.mouse_move_callbacks.append(self._on_mouse_move)
         self.layer.mouse_drag_callbacks.append(self._on_mouse_press)
@@ -108,12 +109,16 @@ class VispyLabelsBrushStrokeOverlay(LayerOverlayMixin, VispySceneOverlay):
         # stroke resumes on the next mouse move
         previous_mouse_pan = layer.mouse_pan
         layer.mouse_pan = True
-        yield
-        while event.type == 'mouse_move':
+        self._panning = True
+        try:
             yield
-        layer.mouse_pan = previous_mouse_pan
-        # avoid interpolating a stray line across the panned gap
-        self._last_coord = None
+            while event.type == 'mouse_move':
+                yield
+        finally:
+            layer.mouse_pan = previous_mouse_pan
+            self._panning = False
+            # avoid interpolating a stray line across the panned gap
+            self._last_coord = None
 
     def _start_stroke(self, layer, event) -> None:
         coord = mouse_event_to_labels_coordinate(layer, event)
@@ -129,7 +134,7 @@ class VispyLabelsBrushStrokeOverlay(LayerOverlayMixin, VispySceneOverlay):
 
     @_only_when_overlay_enabled
     def _on_mouse_move(self, layer, event) -> None:
-        if not self.overlay.active:
+        if not self.overlay.active or self._panning:
             return
         coord = mouse_event_to_labels_coordinate(layer, event)
         if coord is None:

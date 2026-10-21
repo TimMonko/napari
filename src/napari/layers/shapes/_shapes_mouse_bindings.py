@@ -46,6 +46,9 @@ def highlight(layer: Shapes, event: MouseEvent) -> None:
     -------
     None
     """
+    # hover only: drags handle their own updates
+    if event.is_dragging:
+        return
     if layer._mode in {
         Mode.SELECT,
         Mode.DIRECT,
@@ -399,6 +402,21 @@ def add_vertex_to_path(
     layer._moving_value = copy(layer._value)
     layer._data_view.edit(index, vertices, new_type=new_type)
     layer._last_cursor_position = np.array(event.pos)
+
+
+def polygon_creating_on_move(layer: Shapes, event: MouseEvent) -> None:
+    """Run `polygon_creating` on hover; drags step it themselves.
+
+    Parameters
+    ----------
+    layer : Shapes
+        Napari shapes layer
+    event : MouseEvent
+        A proxy read only wrapper around a vispy mouse event.
+    """
+    if event.is_dragging:
+        return
+    polygon_creating(layer, event)
 
 
 def polygon_creating(layer: Shapes, event: MouseEvent) -> None:

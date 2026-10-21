@@ -283,7 +283,10 @@ def test_unselected_layer_mouse_bindings(qtbot, make_napari_viewer):
 def test_highlight_box_handles(position, dims_displayed, nearby_handle):
     layer = Image(np.empty((10, 10)))
     event = Mock(
-        position=position, dims_displayed=dims_displayed, modifiers=[None]
+        position=position,
+        dims_displayed=dims_displayed,
+        modifiers=[None],
+        is_dragging=False,
     )
     highlight_box_handles(
         layer,

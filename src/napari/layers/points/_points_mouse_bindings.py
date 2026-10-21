@@ -150,6 +150,9 @@ def add(layer: Points, event: Event) -> Generator[None, None, None]:
 
 def highlight(layer: Points, event: Event) -> None:
     """Highlight hovered points."""
+    # hover only: drags handle their own updates
+    if event.is_dragging:
+        return
     layer._set_highlight()
 
 

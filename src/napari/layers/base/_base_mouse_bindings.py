@@ -24,6 +24,9 @@ def highlight_box_handles(layer: Layer, event: Event) -> None:
     """
     Highlight the hovered handle of a TransformBox.
     """
+    # hover only: drags handle their own updates
+    if event.is_dragging:
+        return
     if len(event.dims_displayed) != 2:
         return
 

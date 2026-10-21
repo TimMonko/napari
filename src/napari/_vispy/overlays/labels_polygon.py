@@ -166,7 +166,7 @@ class VispyLabelsPolygonOverlay(LayerOverlayMixin, VispySceneOverlay):
     @_only_when_enabled
     def _on_mouse_move(self, layer, event) -> None:
         """Continuously redraw the latest polygon point with the current mouse position."""
-        if self._num_points == 0:
+        if self._num_points == 0 or event.is_dragging:
             return
 
         pos = self._get_mouse_coordinates(event)

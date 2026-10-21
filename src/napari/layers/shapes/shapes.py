@@ -36,7 +36,7 @@ from napari.layers.shapes._shapes_mouse_bindings import (
     add_rectangle,
     finish_drawing_shape,
     highlight,
-    polygon_creating,
+    polygon_creating_on_move,
     select,
     vertex_insert,
     vertex_remove,
@@ -393,10 +393,10 @@ class Shapes(Layer):
         Mode.ADD_RECTANGLE: no_op,
         Mode.ADD_ELLIPSE: no_op,
         Mode.ADD_LINE: no_op,
-        Mode.ADD_POLYLINE: polygon_creating,
-        Mode.ADD_PATH: polygon_creating,
-        Mode.ADD_POLYGON: polygon_creating,
-        Mode.ADD_POLYGON_LASSO: polygon_creating,
+        Mode.ADD_POLYLINE: polygon_creating_on_move,
+        Mode.ADD_PATH: polygon_creating_on_move,
+        Mode.ADD_POLYGON: polygon_creating_on_move,
+        Mode.ADD_POLYGON_LASSO: polygon_creating_on_move,
     }
 
     _double_click_modes: ClassVar[
