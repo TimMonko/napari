@@ -50,22 +50,62 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
             self._on_view_direction_change
         )
         self.viewer.scene.camera.events.orientation.connect(
-            self._on_view_direction_change
+            self._on_camera_change
         )
-        self.viewer.scene.camera.events.zoom.connect(
-            self._on_view_direction_change
-        )
+        # in 2D, ticks follow the visible part of the data
+        self.viewer.scene.camera.events.zoom.connect(self._on_camera_change)
+        self.viewer.scene.camera.events.center.connect(self._on_camera_change)
+        self.viewer.canvas.events.size.connect(self._on_camera_change)
+        self._label_ranges: list[RangeTuple] = []
         get_settings().appearance.events.theme.connect(self._rebuild_all)
         self.viewer.events.theme.connect(self._rebuild_all)
 
         self.reset()
 
+    def _get_data_ranges(self) -> list[RangeTuple]:
+        # napari dims are zyx, but vispy uses xyz
+        displayed = self.viewer.dims.displayed[::-1]
+        return [self.viewer.dims.range[i] for i in displayed]
+
+    def _get_label_ranges(self) -> list[RangeTuple]:
+        """Get the ranges that ticks and labels are placed in.
+
+        In 2D, this is the part of the data that is visible on the canvas,
+        so that ticks adapt to zoom and labels stay on screen. In 3D, the
+        visible area depends on the view angle, so it's the whole data.
+        """
+        ranges = self._get_data_ranges()
+        if self.viewer.dims.ndisplay != 2:
+            return ranges
+
+        displayed = self.viewer.dims.displayed[::-1]
+        corners = np.array(
+            [
+                self.viewer.canvas_to_world((0, 0)),
+                self.viewer.canvas_to_world(
+                    self.viewer.canvas.viewbox_size(self.viewer.layers)
+                ),
+            ]
+        )
+        # labels sit outside the start of the other axis, so keep that far
+        # from the canvas edge to stay visible (axis labels are offset the
+        # most, see CoordinateGrid.set_view_direction)
+        margin = self.node.font_size * 7 / self.viewer.scene.camera.zoom
+        clipped = []
+        for dim, range_ in zip(displayed, ranges, strict=True):
+            low = min(corners[:, dim])
+            high = max(corners[:, dim])
+            start = max(range_.start, low + margin)
+            stop = min(range_.stop, high)
+            # nothing visible: an empty range gives no ticks
+            clipped.append(RangeTuple(start, max(start, stop), range_.step))
+        return clipped
+
     def _get_ranges_and_axis_labels(
         self,
     ) -> tuple[list[RangeTuple], list[str], list[float]]:
-        # napari dims are zyx, but vispy uses xyz
         displayed = self.viewer.dims.displayed[::-1]
-        ranges = [self.viewer.dims.range[i] for i in displayed]
+        ranges = self._get_label_ranges()
         axis_labels = [self.viewer.dims.axis_labels[i] for i in displayed]
 
         units = ['' for _ in displayed]
@@ -116,6 +156,7 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
 
     def _on_ticks_change(self) -> None:
         ranges, _, scales = self._get_ranges_and_axis_labels()
+        self._label_ranges = ranges
         self.node.set_ticks(
             self.overlay.tick_labels, self.overlay.n_ticks, ranges, scales
         )
@@ -124,8 +165,7 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
         self._on_view_direction_change()
 
     def _on_extent_change(self) -> None:
-        ranges, _, _ = self._get_ranges_and_axis_labels()
-        self.node.set_extents(ranges)
+        self.node.set_extents(self._get_data_ranges())
         self._on_ticks_change()
         self._on_axis_labels_change()
 
@@ -139,10 +179,24 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
 
         self._on_view_direction_change()
 
+    def _on_camera_change(self) -> None:
+        if self.viewer.dims.ndisplay == 2:
+            ranges, axis_labels, scales = self._get_ranges_and_axis_labels()
+            if ranges != self._label_ranges:
+                self._label_ranges = ranges
+                self.node.set_ticks(
+                    self.overlay.tick_labels,
+                    self.overlay.n_ticks,
+                    ranges,
+                    scales,
+                )
+                self.node.set_axis_labels(
+                    self.overlay.axis_labels, ranges, axis_labels
+                )
+        self._on_view_direction_change()
+
     def _on_view_direction_change(self) -> None:
-        # all is flipped from zyx to xyz for vispy
-        displayed = self.viewer.dims.displayed[::-1]
-        ranges = tuple(self.viewer.dims.range[i] for i in displayed)
+        ranges = tuple(self._get_label_ranges())
 
         if len(ranges) == 3:
             view_direction = np.sign(self.viewer.scene.camera.view_direction)

@@ -69,3 +69,44 @@ def test_ticks_use_compact_units():
         np.testing.assert_allclose(
             ticks.pos[:, 0], np.array([0, 2, 4, 6, 8]) / scale
         )
+
+
+def test_2d_ticks_follow_zoom_and_pan():
+    viewer = ViewerModel()
+    coordinate_grid_vispy = VispyCoordinateGridOverlay(
+        viewer=viewer, overlay=CoordinateGridOverlay(), font_info=FontInfo()
+    )
+    viewer.add_image(np.zeros((1000, 1000)), units='m')
+    node = coordinate_grid_vispy.node
+
+    # zoom so that about 0.5 m of the 1000 m image fills the canvas width
+    viewer.scene.camera.center = (0, 500, 500)
+    viewer.scene.camera.zoom = viewer.canvas.size[1] / 0.5
+
+    # ticks only cover the visible part, in a unit that fits it
+    assert node.axis_labels[0].text.endswith('(mm)')
+    values = np.array([float(t) for t in node.tick_labels[0].text]) / 1000
+    assert values.min() > 499.5
+    assert values.max() < 500.5
+    # but grid lines still cover the whole data
+    x0, x1, _, _ = node.grids[0].grid_bounds
+    assert x1 - x0 == 999
+
+    # pan the image out of view: no ticks are left for x
+    viewer.scene.camera.center = (0, 500, 5000)
+    assert not node.tick_labels[0].visible
+
+
+def test_3d_ticks_cover_whole_data():
+    viewer = ViewerModel()
+    coordinate_grid_vispy = VispyCoordinateGridOverlay(
+        viewer=viewer, overlay=CoordinateGridOverlay(), font_info=FontInfo()
+    )
+    viewer.add_image(np.zeros((10, 1000, 1000)), units='m')
+    viewer.dims.ndisplay = 3
+    viewer.scene.camera.zoom = 1000
+
+    ticks = coordinate_grid_vispy.node.tick_labels[0]
+    values = [float(t) for t in ticks.text]
+    assert values[0] < 250
+    assert values[-1] > 750

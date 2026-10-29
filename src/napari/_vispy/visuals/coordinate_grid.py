@@ -38,6 +38,9 @@ class CoordinateGrid(Node):
         self.axis_labels: list[Text] = [
             Text(font_info=font_info) for _ in range(3)
         ]
+        self._tick_cache: list[tuple[list[str], list[tuple]]] = [
+            ([], []) for _ in range(3)
+        ]
         self._color: ColorValue | str = 'white'
         self._opacity = 1.0
 
@@ -254,8 +257,13 @@ class CoordinateGrid(Node):
                     np.format_float_positional(val, decimals, trim='-')
                 )
                 pos.append((val / scale, ranges[next_axis].start, 0))
-            ticks.text = text
-            ticks.pos = pos
+            # this runs on every camera move in 2D, and updating text
+            # visuals is costly, so skip it when nothing changed. Text
+            # can't take empty positions, so leave it as is when hidden
+            if values.size and (text, pos) != self._tick_cache[axis]:
+                self._tick_cache[axis] = (text, pos)
+                ticks.text = text
+                ticks.pos = pos
             ticks.color = self.color
             ticks.opacity = self._opacity
             ticks.visible = len(values) > 0
