@@ -28,6 +28,7 @@ class VispyCrosshairOverlay(ViewerOverlayMixin, VispySceneOverlay):
         self.viewer.dims.events.order.connect(self._on_color_change)
         self.viewer.dims.events.ndisplay.connect(self._on_color_change)
         self.overlay.events.gap.connect(self._on_gap_change)
+        self.overlay.events.width.connect(self._on_width_change)
 
         self.viewer.cursor.events.position.connect(self._on_position_change)
         self.viewer.dims.events.ndisplay.connect(self._on_position_change)
@@ -73,6 +74,9 @@ class VispyCrosshairOverlay(ViewerOverlayMixin, VispySceneOverlay):
     def _on_gap_change(self) -> None:
         self.node.gap = self.overlay.gap
 
+    def _on_width_change(self) -> None:
+        self.node.width = self.overlay.width
+
     def close(self) -> None:
         disconnect_events(self.viewer.cursor.events, self)
         disconnect_events(self.viewer.dims.events, self)
@@ -83,3 +87,4 @@ class VispyCrosshairOverlay(ViewerOverlayMixin, VispySceneOverlay):
         self._on_position_change()
         self._on_color_change()
         self._on_gap_change()
+        self._on_width_change()

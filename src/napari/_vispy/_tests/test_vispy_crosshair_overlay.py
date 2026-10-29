@@ -54,6 +54,10 @@ def test_crosshair_follows_model(crosshair_overlay):
     overlay.gap = 35
     assert node.gap == 35
 
+    assert node.width == 1
+    overlay.width = 4.5
+    assert node.width == 4.5
+
 
 def test_crosshair_updates_on_dims_change(crosshair_overlay):
     """Test the crosshair is not stale after the displayed dims change"""
