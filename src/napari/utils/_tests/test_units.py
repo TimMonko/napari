@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 
-from napari.utils._units import compute_nice_ticks
+from napari.utils._units import (
+    compact_unit,
+    compute_nice_ticks,
+    get_unit_registry,
+)
 
 
 @pytest.mark.parametrize(
@@ -22,3 +26,27 @@ def test_compute_nice_ticks(
     ticks, decimals = compute_nice_ticks(start, stop, n_ticks)
     np.testing.assert_allclose(ticks, expected_ticks)
     assert decimals == expected_decimals
+
+
+@pytest.mark.parametrize(
+    ('unit', 'span', 'expected_unit', 'expected_factor'),
+    [
+        ('m', 2e-9, 'nm', 1e9),
+        ('m', -2e-9, 'nm', 1e9),
+        ('um', 3000, 'mm', 1e-3),
+        ('um', 30, 'um', 1),
+        ('nm', 1e-3, 'pm', 1e3),
+        ('pixel', 2000, 'kilopixel', 1e-3),
+        ('dimensionless', 1e-9, 'dimensionless', 1),
+        # angles are dimensionless in pint but still take prefixes
+        ('degree', 2e-3, 'millidegree', 1e3),
+        ('m', 0, 'm', 1),
+        ('m', float('inf'), 'm', 1),
+    ],
+)
+def test_compact_unit(unit, span, expected_unit, expected_factor):
+    reg = get_unit_registry()
+    compact, factor = compact_unit(reg(unit).units, span)
+    assert compact == reg(expected_unit).units
+    # exact, so that scaled tick values stay round
+    assert factor == expected_factor

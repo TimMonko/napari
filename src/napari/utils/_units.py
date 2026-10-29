@@ -108,3 +108,29 @@ def compute_nice_ticks(
                 best_decimals = max(0, -int(exponent))
 
     return best_ticks, best_decimals
+
+
+def compact_unit(unit: 'pint.Unit', span: float) -> tuple['pint.Unit', float]:
+    """Get a prefixed unit that shows a span with a readable magnitude.
+
+    Parameters
+    ----------
+    unit : pint.Unit
+        Unit of the span.
+    span : float
+        Extent to be shown, in `unit`.
+
+    Returns
+    -------
+    compact : pint.Unit
+        Prefixed unit (e.g. nm for 2e-9 m). Same as `unit` if
+        `span` is zero or not finite.
+    factor : float
+        Factor converting values in `unit` to `compact`.
+    """
+    if span == 0 or not np.isfinite(span):
+        return unit, 1.0
+    compact = (abs(span) * unit).to_compact().units
+    factor = (1 * unit).to(compact).magnitude
+    # prefixes are powers of 10, so drop float noise (999999999.9999999)
+    return compact, float(f'{factor:.15g}')
