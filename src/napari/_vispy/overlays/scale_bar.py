@@ -10,7 +10,7 @@ import pint
 
 from napari._vispy.overlays.base import ViewerOverlayMixin, VispyCanvasOverlay
 from napari._vispy.visuals.scale_bar import ScaleBar
-from napari.utils._units import PREFERRED_VALUES
+from napari.utils._units import PREFERRED_VALUES, compact_unit
 from napari.utils.notifications import show_warning
 
 if TYPE_CHECKING:
@@ -108,12 +108,9 @@ class VispyScaleBarOverlay(ViewerOverlayMixin, VispyCanvasOverlay):
         new_quantity : pint.Quantity
             New quantity with abbreviated base unit.
         """
-        current_quantity = self._unit * desired_length
-        # convert the value to compact representation
-        new_quantity = current_quantity.to_compact()
-        # calculate the scaling factor taking into account any conversion
-        # that might have occurred (e.g. um -> cm)
-        factor = current_quantity / new_quantity
+        # convert the value to compact representation (e.g. um -> cm)
+        unit, factor = compact_unit(self._unit.units, desired_length)
+        new_quantity = desired_length * factor * unit
 
         # select value closest to one of our preferred values and also
         # validate if quantity is dimensionless and lower than 1 to prevent
@@ -137,10 +134,8 @@ class VispyScaleBarOverlay(ViewerOverlayMixin, VispyCanvasOverlay):
             )
 
         # get the new pixel length utilizing the user-specified units
-        new_length = (
-            (new_value * factor) / (1 * self._unit).magnitude
-        ).magnitude
-        new_quantity = new_value * new_quantity.units
+        new_length = new_value / factor
+        new_quantity = new_value * unit
         return new_length, new_quantity
 
     def _on_size_or_zoom_change(self) -> None:

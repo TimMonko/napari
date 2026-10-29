@@ -39,3 +39,14 @@ def test_scale_bar_inconsistent_units_default_to_pixel(
     img1.units = ('um', 'um')
     vispy_scale_bar._on_unit_change()
     assert vispy_scale_bar._unit.units == 'micrometer'
+
+
+def test_scale_bar_length_on_prefix_boundary(viewer_model: ViewerModel):
+    viewer_model.add_image(data=np.zeros((10, 10)), units=('m', 'm'))
+    vispy_scale_bar = VispyScaleBarOverlay(
+        overlay=ScaleBarOverlay(), viewer=viewer_model, font_info=FontInfo()
+    )
+    # float noise used to give 0.999... nm and pick 750 nm instead
+    length, quantity = vispy_scale_bar._calculate_best_length(1e-9)
+    assert length == 1e-9
+    assert quantity == 1 * quantity._REGISTRY.nm
