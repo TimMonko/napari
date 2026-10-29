@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from vispy.gloo import VertexBuffer
+from vispy.gloo import IndexBuffer, VertexBuffer
 from vispy.scene.visuals import create_visual_node
 from vispy.visuals import Visual
 
@@ -12,23 +12,31 @@ if TYPE_CHECKING:
 
 _VERTEX_SHADER = """
 // this shader has no vertices; instead, it uses indices to distinguish
-// between which case we're in (i.e: which axis and which extremity).
-// `axis` will be 0, 1 or 2, and `side` either -1 or 1. Those are used to
-// output the segment extremities far past the screen so the lines look
-// infinite. The central gap is then discarded in the fragment shader.
+// between which case we're in (i.e: which axis, which extremity, and which
+// edge of the line). Each line is a quad made of 4 vertices: `axis` will be
+// 0, 1 or 2, while `side` (along the line) and `across` (perpendicular to
+// it) are either -1 or 1. `side` is used to output the segment extremities
+// far past the screen so the lines look infinite, and `across` to give the
+// line a width in screen pixels. The central gap is then discarded in the
+// fragment shader.
+// Lines are drawn as triangles because GL_LINES widths other than 1 are
+// not supported on all platforms (e.g: macOS core profile, ANGLE).
 
 attribute float a_idx;  // int attributes not working, so we use a float
-attribute vec4 a_color;  // one color per axis, repeated for both extremities
+attribute vec4 a_color;  // one color per axis, repeated for each vertex
 
 varying vec2 v_center;
 varying vec4 v_color;
+varying float v_across;  // signed distance from the line center, in pixels
 
 void main()
 {
     v_color = a_color;
 
-    int axis = int(a_idx) / 2;
-    float side = (int(mod(a_idx, 2)) == 0) ? -1.0 : 1.0;
+    int idx = int(a_idx);
+    int axis = idx / 4;
+    float side = (int(mod(float(idx), 2.0)) == 0) ? -1.0 : 1.0;
+    float across = (int(mod(float(idx / 2), 2.0)) == 0) ? -1.0 : 1.0;
 
     vec3 direction =
         axis == 0 ? vec3(side, 0, 0) :
@@ -72,6 +80,17 @@ void main()
         pos = center_ndc + normalize(axis_dir) * extent;
     }
 
+    // offset the vertex perpendicular to the line on screen. This must be
+    // computed in pixels, because ndc are stretched by the canvas aspect.
+    // The quad is padded by one physical pixel on each side so the edges
+    // can be antialiased in the fragment shader.
+    vec2 axis_px = normalize(axis_dir * $canvas_size);
+    vec2 normal_px = vec2(-axis_px.y, axis_px.x);
+    float half_width = $width / 2.0 + 1.0 / $pixel_ratio;
+    v_across = across * half_width;
+    // ndc span 2 units over the canvas size
+    pos += normal_px * v_across * 2.0 / $canvas_size;
+
     gl_Position = vec4(pos, center.z / center.w, 1.0);
 }
 """
@@ -79,6 +98,7 @@ void main()
 _FRAGMENT_SHADER = """
 varying vec2 v_center;
 varying vec4 v_color;
+varying float v_across;
 
 void main() {
     // gl_FragCoord is in physical pixels; $canvas_size is logical pixels
@@ -90,7 +110,14 @@ void main() {
     if (dist_from_center < $gap / 2.0) {
         discard;
     }
-    gl_FragColor = v_color;
+
+    // antialias the edges of the line over one physical pixel
+    float edge = ($width / 2.0 - abs(v_across)) * $pixel_ratio + 0.5;
+    float alpha = clamp(edge, 0.0, 1.0);
+    if (alpha <= 0.0) {
+        discard;
+    }
+    gl_FragColor = vec4(v_color.rgb, v_color.a * alpha);
 }
 """
 
@@ -99,18 +126,26 @@ class CrosshairVisual(Visual):
     """Crosshair visual with a central gap.
 
     Displays an "infinite" 3D crosshair around a central point, with
-    a circular gap around the center defined in screen pixels.
+    a circular gap around the center defined in screen pixels. Lines
+    are drawn as screen-aligned quads, so their width (in screen pixels)
+    is consistent across platforms.
     """
 
     def __init__(self) -> None:
         super().__init__(vcode=_VERTEX_SHADER, fcode=_FRAGMENT_SHADER)
+        # 4 vertices per axis, 2 triangles per axis
         self.shared_program['a_idx'] = VertexBuffer(
-            np.arange(6, dtype=np.float32)
+            np.arange(12, dtype=np.float32)
         )
-        self._draw_mode = 'lines'
+        quad = np.array([0, 1, 2, 1, 3, 2], dtype=np.uint32)
+        self._index_buffer = IndexBuffer(
+            np.concatenate([quad + 4 * axis for axis in range(3)])
+        )
+        self._draw_mode = 'triangles'
         self.position = np.array((0, 0, 0))
         self.color = np.array((1, 1, 1, 1))
         self.gap = 20
+        self.width = 1
 
     @property
     def position(self) -> np.ndarray:
@@ -131,9 +166,9 @@ class CrosshairVisual(Visual):
         """A single RGBA color, or one RGBA color per axis (x, y, z)."""
         self._color = np.array(value, dtype=np.float32)
         per_axis = np.broadcast_to(self._color, (3, 4))
-        # 2 vertices per axis
+        # 4 vertices per axis
         self.shared_program['a_color'] = VertexBuffer(
-            np.repeat(per_axis, 2, axis=0).astype(np.float32)
+            np.repeat(per_axis, 4, axis=0).astype(np.float32)
         )
         self.update()
 
@@ -147,6 +182,18 @@ class CrosshairVisual(Visual):
         self.shared_program.frag['gap'] = self._gap
         self.update()
 
+    @property
+    def width(self) -> float:
+        """Width of the lines, in screen pixels."""
+        return self._width
+
+    @width.setter
+    def width(self, value: float) -> None:
+        self._width = float(value)
+        self.shared_program.vert['width'] = self._width
+        self.shared_program.frag['width'] = self._width
+        self.update()
+
     def _prepare_transforms(self, view: VisualView | None = None) -> None:
         if view is not None:
             view.view_program.vert['visual_to_render'] = (
@@ -158,15 +205,11 @@ class CrosshairVisual(Visual):
 
         The *view* argument indicates which view is about to be drawn.
         """
-
-        self.update_gl_state(line_smooth=1)
-        px_scale = self.transforms.pixel_scale
-        width = px_scale * 1
-        self.update_gl_state(line_width=max(width, 1.0))
-
         if view is not None:
-            self.shared_program.frag['canvas_size'] = view.canvas.size
-            self.shared_program.frag['pixel_ratio'] = px_scale
+            px_scale = self.transforms.pixel_scale
+            for shader in (self.shared_program.vert, self.shared_program.frag):
+                shader['canvas_size'] = view.canvas.size
+                shader['pixel_ratio'] = px_scale
 
 
 Crosshair = create_visual_node(CrosshairVisual)
