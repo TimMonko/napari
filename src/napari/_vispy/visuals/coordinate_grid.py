@@ -130,6 +130,7 @@ class CoordinateGrid(Node):
         ranges: tuple[RangeTuple, RangeTuple, RangeTuple],
         view_is_flipped: tuple[bool, bool, bool],
         zoom: float,
+        ndisplay: int,
     ) -> None:
 
         # translate everything with the grid on xy plane, we transpose later
@@ -145,8 +146,10 @@ class CoordinateGrid(Node):
             farthest_bound = ranges[axis][far_bound_idx]
             far_bounds.append(farthest_bound)
 
-        # magic numbers, they work ok at a wide range of zooms
-        tick_offset = self.font_size * 2 / zoom
+        # the 3D camera can rotate, even for 2D data
+        tick_offsets, axis_label_offsets = self._get_text_offsets(
+            is_3d=ndisplay == 3
+        )
 
         # offset ticks for each axis so they are positioned nicely for readability,
         # putting them all on the outside of the volume (over the background)
@@ -164,22 +167,63 @@ class CoordinateGrid(Node):
                 axis,
                 far_bounds,
                 ranges,
-                tick_offset,
+                tick_offsets[axis] / zoom,
                 view_is_flipped,
             )
-            # offset * 3 for axis labels so they don't overlap
             self._translate_text_based_on_camera(
                 self.axis_labels[axis],
                 axis,
                 far_bounds,
                 ranges,
-                tick_offset * 3,
+                axis_label_offsets[axis] / zoom,
                 view_is_flipped,
             )
 
         # rotate grids onto the right axes
         for axis in range(3):
             self.grids[axis].transform.rotate(angle=120 * axis, axis=(1, 1, 1))
+
+    def _get_text_offsets(
+        self, is_3d: bool
+    ) -> tuple[list[float], list[float]]:
+        """Get the distance of tick and axis labels from the grid, in pixels.
+
+        Text is centered on its position, so in 2D labels are moved by half
+        their size, plus padding, to clear the grid. Axis labels then clear
+        the widest tick label, which can be much longer than `font_size`
+        (e.g. 2,800,000). The x axis' labels are stacked vertically (so
+        their height matters), the y axis' ones side by side (their width).
+
+        In 3D, the direction labels are moved in depends on the view, so
+        they use fixed offsets, which work ok at a wide range of zooms.
+        """
+        padding = self.font_size
+        if is_3d:
+            return [padding * 2] * 3, [padding * 6] * 3
+
+        tick_offsets = []
+        axis_label_offsets = []
+        for axis in range(3):
+            # 0 is width, 1 is height
+            size_index = 0 if axis == 1 else 1
+            ticks = self.tick_labels[axis]
+            tick_size = 0.0
+            if ticks.visible and len(ticks.text):
+                # the widest tick, but only one line high
+                tick_size = (
+                    ticks.get_width_height()[0]
+                    if size_index == 0
+                    else ticks.get_line_height()
+                )
+            label = self.axis_labels[axis]
+            label_size = 0.0
+            if label.visible and label.text:
+                label_size = label.get_width_height()[size_index]
+            tick_offsets.append(padding + tick_size / 2)
+            axis_label_offsets.append(
+                padding + tick_size + padding + label_size / 2
+            )
+        return tick_offsets, axis_label_offsets
 
     def _translate_text_based_on_camera(
         self,

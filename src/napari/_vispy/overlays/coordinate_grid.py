@@ -150,6 +150,7 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
             ranges,
             view_is_flipped,
             zoom=self.viewer.scene.camera.zoom,
+            ndisplay=self.viewer.dims.ndisplay,
         )
 
     def reset(self) -> None:
