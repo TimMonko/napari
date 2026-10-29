@@ -3,7 +3,9 @@ import pytest
 
 from napari.utils._units import (
     compact_unit,
+    compute_nice_step,
     compute_nice_ticks,
+    compute_ticks_with_step,
     get_unit_registry,
 )
 
@@ -50,3 +52,28 @@ def test_compact_unit(unit, span, expected_unit, expected_factor):
     assert compact == reg(expected_unit).units
     # exact, so that scaled tick values stay round
     assert factor == expected_factor
+
+
+@pytest.mark.parametrize(
+    ('span', 'previous', 'expected'),
+    [
+        (9, None, 2.5),
+        (0.03, None, 0.0075),
+        (2.4e6, None, 500_000),
+        # kept while it's close enough to the ideal step (2.25)
+        (9, 2, 2),
+        (9, 3, 3),
+        (9, 4, 2.5),
+        (0, None, float('nan')),
+    ],
+)
+def test_compute_nice_step(span, previous, expected):
+    step = compute_nice_step(span, 5, previous)
+    np.testing.assert_equal(step, expected)
+
+
+def test_compute_ticks_with_step():
+    ticks, decimals = compute_ticks_with_step(0.1, 1.05, 0.25)
+    np.testing.assert_allclose(ticks, [0.25, 0.5, 0.75, 1])
+    assert decimals == 2
+    assert compute_ticks_with_step(1, 1, 0.25)[0].size == 0

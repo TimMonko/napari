@@ -65,11 +65,11 @@ def test_ticks_use_compact_units():
     for axis, scale in enumerate([1e3, 1e9]):
         ticks = coordinate_grid_vispy.node.tick_labels[axis]
         np.testing.assert_array_equal(
-            [float(t) for t in ticks.text], [0, 2, 4, 6, 8]
+            [float(t) for t in ticks.text], [0, 2.5, 5, 7.5]
         )
         # ticks are still placed in world coordinates
         np.testing.assert_allclose(
-            ticks.pos[:, 0], np.array([0, 2, 4, 6, 8]) / scale
+            ticks.pos[:, 0], np.array([0, 2.5, 5, 7.5]) / scale
         )
 
 
@@ -127,13 +127,11 @@ def test_2d_axis_labels_clear_tick_labels():
         np.zeros((10, 10)), scale=(30, 30), translate=(2_650_000, 101_000)
     )
     viewer.dims.axis_labels = ('northing', 'easting')
-    # zoom out so that labels are next to the data, not pinned inside
-    # the canvas edge
-    viewer.scene.camera.zoom /= 2
     node = coordinate_grid_vispy.node
     zoom = viewer.scene.camera.zoom
-    # vispy is xyz, napari is yx
-    edges = [viewer.dims.range[0].start, viewer.dims.range[1].start]
+    # labels are next to the start of the data, or pinned inside the
+    # canvas when that's off screen (xyz order)
+    edges = [r.start for r in coordinate_grid_vispy._get_label_ranges()]
 
     # x ticks are stacked above the data, y ticks side by side left of it
     for axis, size_index in [(0, 1), (1, 0)]:
@@ -144,7 +142,7 @@ def test_2d_axis_labels_clear_tick_labels():
             world = grid.transform.map(text.transform.map(pos))
             # distance from the data edge to the text center, in pixels
             other = 1 - axis
-            offsets.append((edges[other ^ 1] - world[other]) * zoom)
+            offsets.append((edges[other] - world[other]) * zoom)
         tick_offset, label_offset = offsets
         ticks = node.tick_labels[axis]
         tick_size = (
@@ -156,3 +154,31 @@ def test_2d_axis_labels_clear_tick_labels():
         # text is centered, so half of it is on each side of its position
         assert tick_offset - tick_size / 2 > 0
         assert label_offset - label_size / 2 > tick_offset + tick_size / 2
+
+
+@pytest.mark.usefixtures('qapp')
+def test_2d_ticks_keep_their_step_when_panning():
+    viewer = ViewerModel()
+    coordinate_grid_vispy = VispyCoordinateGridOverlay(
+        viewer=viewer, overlay=CoordinateGridOverlay(), font_info=FontInfo()
+    )
+    viewer.add_image(np.zeros((1000, 1000)))
+    node = coordinate_grid_vispy.node
+    viewer.scene.camera.center = (0, 500, 500)
+    viewer.scene.camera.zoom = 10
+
+    def x_ticks():
+        return np.array([float(t) for t in node.tick_labels[0].text])
+
+    ticks = x_ticks()
+    step = np.diff(ticks)[0]
+    label = node.axis_labels[0].text
+    for shift in (0.3, 3.7, 17.2):
+        viewer.scene.camera.center = (0, 500, 500 + shift)
+        np.testing.assert_allclose(np.diff(x_ticks()), step)
+        assert node.axis_labels[0].text == label
+
+    # a small pan moves labels with their transform, without new text
+    shown = node._ticks[0][0]
+    viewer.scene.camera.center = (0, 500, 500 + shift + 0.01)
+    assert node._ticks[0][0] is shown

@@ -110,6 +110,76 @@ def compute_nice_ticks(
     return best_ticks, best_decimals
 
 
+# a step is kept until the ideal one is this many times larger or smaller,
+# so that zooming around a threshold does not make ticks flicker. Preferred
+# steps are at most 1.5 times apart, so the closest one is always kept
+_STEP_HYSTERESIS = 1.5
+
+
+def compute_nice_step(
+    span: float, target_ticks: int = 5, previous: float | None = None
+) -> float:
+    """Get a round step that divides a span into about `target_ticks` ticks.
+
+    Unlike `compute_nice_ticks`, this only depends on the length of the span,
+    not on where it starts, so the step doesn't change when panning.
+
+    Parameters
+    ----------
+    span : float
+        Length to divide.
+    target_ticks : int
+        Number of ticks to aim for.
+    previous : float, optional
+        Step used so far, which is kept unless it's far from the ideal one.
+
+    Returns
+    -------
+    float
+        The step, or nan if `span` is not positive and finite.
+    """
+    if not (span > 0 and np.isfinite(span)):
+        return float('nan')
+    ideal = span / max(target_ticks - 1, 1)
+    if (
+        previous is not None
+        and ideal / _STEP_HYSTERESIS <= previous <= ideal * _STEP_HYSTERESIS
+    ):
+        return previous
+    exponent = int(np.floor(np.log10(ideal)))
+    candidates = [
+        base * 10.0**exp
+        for exp in (exponent - 1, exponent, exponent + 1)
+        for base in PREFERRED_TICK_VALUES
+    ]
+    step = min(candidates, key=lambda c: abs(np.log(c / ideal)))
+    # drop float noise (e.g. 0.30000000000000004)
+    return float(f'{step:.12g}')
+
+
+def compute_ticks_with_step(
+    min_value: float, max_value: float, step: float
+) -> tuple[np.ndarray, int]:
+    """Get the multiples of a step in a range.
+
+    Returns
+    -------
+    ticks : np.ndarray
+        The tick values.
+    decimals : int
+        Decimal places needed to show the ticks exactly.
+    """
+    if not (max_value > min_value and step > 0):
+        return np.empty(0, float), 0
+    # see compute_nice_ticks for why Decimal and str
+    step_decimal = Decimal(str(step))
+    ticks = _generate_ticks(
+        step_decimal, 0, Decimal(str(min_value)), Decimal(str(max_value))
+    )
+    exponent = step_decimal.normalize().as_tuple().exponent
+    return ticks, max(0, -int(exponent))
+
+
 def compact_unit(unit: 'pint.Unit', span: float) -> tuple['pint.Unit', float]:
     """Get a prefixed unit that shows a span with a readable magnitude.
 

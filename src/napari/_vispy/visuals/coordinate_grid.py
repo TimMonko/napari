@@ -9,7 +9,6 @@ from vispy.scene.visuals import GridLines, Node
 
 from napari._vispy.visuals.text import Text
 from napari.components.dims import RangeTuple
-from napari.utils._units import compute_nice_ticks
 
 if TYPE_CHECKING:
     from vispy.visuals.filters.clipper import Clipper
@@ -38,8 +37,15 @@ class CoordinateGrid(Node):
         self.axis_labels: list[Text] = [
             Text(font_info=font_info) for _ in range(3)
         ]
-        self._tick_cache: list[tuple[list[str], list[tuple]]] = [
-            ([], []) for _ in range(3)
+        # ticks shown by each axis (values, scale and decimals), to skip
+        # updates that change nothing
+        self._ticks: list[tuple[np.ndarray, float, int]] = [
+            (np.empty(0), 1.0, 0) for _ in range(3)
+        ]
+        # largest tick label size (width, line height) of each axis since
+        # its scale, decimals or font size changed (the key)
+        self._tick_sizes: list[tuple[tuple, tuple[float, float]]] = [
+            ((), (0.0, 0.0)) for _ in range(3)
         ]
         self._color: ColorValue | str = 'white'
         self._opacity = 1.0
@@ -115,8 +121,6 @@ class CoordinateGrid(Node):
             rng0 = ranges[i]
             rng1 = ranges[(i + 1) % ndisplay]
             bounds.append((rng0.start, rng0.stop, rng1.start, rng1.stop))
-            self.axis_labels[i].pos = (rng0.stop, 0)
-            self.axis_labels[i].text = str(i)
 
         for grid, bound in zip(self.grids, bounds, strict=False):
             grid.grid_bounds = bound
@@ -173,6 +177,7 @@ class CoordinateGrid(Node):
                 tick_offsets[axis] / zoom,
                 view_is_flipped,
             )
+            # axis labels are centered on the axis
             self._translate_text_based_on_camera(
                 self.axis_labels[axis],
                 axis,
@@ -180,6 +185,7 @@ class CoordinateGrid(Node):
                 ranges,
                 axis_label_offsets[axis] / zoom,
                 view_is_flipped,
+                along=(ranges[axis].start + ranges[axis].stop) / 2,
             )
 
         # rotate grids onto the right axes
@@ -207,26 +213,43 @@ class CoordinateGrid(Node):
         tick_offsets = []
         axis_label_offsets = []
         for axis in range(3):
-            # 0 is width, 1 is height
-            size_index = 0 if axis == 1 else 1
-            ticks = self.tick_labels[axis]
-            tick_size = 0.0
-            if ticks.visible and len(ticks.text):
-                # the widest tick, but only one line high
-                tick_size = (
-                    ticks.get_width_height()[0]
-                    if size_index == 0
-                    else ticks.get_line_height()
-                )
-            label = self.axis_labels[axis]
-            label_size = 0.0
-            if label.visible and label.text:
-                label_size = label.get_width_height()[size_index]
+            tick_size, label_size = self._get_2d_text_sizes(axis)
             tick_offsets.append(padding + tick_size / 2)
             axis_label_offsets.append(
                 padding + tick_size + padding + label_size / 2
             )
         return tick_offsets, axis_label_offsets
+
+    def _get_2d_text_sizes(self, axis: int) -> tuple[float, float]:
+        """Get the size of an axis' tick and axis labels away from the grid.
+
+        That's the width for the y axis, and the height for the x one.
+        """
+        # 0 is width, 1 is height
+        size_index = 0 if axis == 1 else 1
+        tick_size = 0.0
+        if self.tick_labels[axis].visible:
+            # the widest tick, but only one line high
+            tick_size = self._tick_sizes[axis][1][size_index]
+        label = self.axis_labels[axis]
+        label_size = 0.0
+        if label.visible and label.text:
+            label_size = label.get_width_height()[size_index]
+        return tick_size, label_size
+
+    def get_2d_label_extents(self) -> list[float]:
+        """Get how far the labels of each axis reach from the grid in 2D.
+
+        In pixels, including padding past the outer side of the axis label.
+        """
+        padding = self.font_size
+        extents = []
+        for axis in range(3):
+            tick_size, label_size = self._get_2d_text_sizes(axis)
+            extents.append(
+                padding + tick_size + padding + label_size + padding
+            )
+        return extents
 
     def _translate_text_based_on_camera(
         self,
@@ -236,7 +259,15 @@ class CoordinateGrid(Node):
         ranges: tuple[RangeTuple, ...],
         offset: float,
         view_is_flipped: tuple[bool, ...],
+        along: float = 0,
     ) -> None:
+        """Move text from the grid's origin to the edge of its axis.
+
+        Texts are only positioned along their axis (ticks) or not at all
+        (axis labels), and moved to their edge here. In 2D, that edge follows
+        the camera so labels stay on the canvas, and moving a transform is
+        much cheaper than updating text positions.
+        """
         prev_axis = (axis - 1) % 3
         next_axis = (axis + 1) % 3
 
@@ -249,7 +280,7 @@ class CoordinateGrid(Node):
         # undo shifts caused by grid transform so we're back to the
         # reference frame of the axes (since ticks are not necessarily
         # on the same side as the grid lines depending on view)
-        text.transform.move((0, 0, -far_bounds[prev_axis]))
+        text.transform.move((along, start_next, -far_bounds[prev_axis]))
 
         if view_is_flipped[next_axis] ^ view_is_flipped[prev_axis]:
             text.transform.move((0, -offset, start_prev - offset))
@@ -266,66 +297,70 @@ class CoordinateGrid(Node):
     def set_ticks(
         self,
         show_ticks: bool,
-        n_ticks: int,
-        ranges: list[RangeTuple],
-        scales: list[float] | None = None,
+        values: list[np.ndarray],
+        decimals: list[int],
+        scales: list[float],
     ) -> None:
         """Update tick labels.
 
-        `scales` converts each axis from world coordinates to the units
-        shown in the labels (e.g. 1e9 to label meters in nm).
+        `values` are the ticks of each axis, in the units shown in the labels,
+        and `decimals` the precision they need. `scales` converts each axis
+        from world coordinates to those units (e.g. 1e9 to label meters in nm).
         """
-        if not show_ticks:
-            for ticks in self.tick_labels:
+        for axis, ticks in enumerate(self.tick_labels):
+            if not show_ticks or axis >= len(values):
                 ticks.visible = False
-            return
-
-        if scales is None:
-            scales = [1.0] * len(ranges)
-
-        ndim = len(ranges)
-        for axis in range(ndim):
-            next_axis = (axis + 1) % ndim
-            ticks = self.tick_labels[axis]
-            scale = scales[axis]
-            # generate tick positions with round values in the label units
-            values, decimals = compute_nice_ticks(
-                ranges[axis].start * scale,
-                ranges[axis].stop * scale,
-                target_ticks=n_ticks,
-            )
-            text = []
-            pos = []
-            for val in values:
-                text.append(
-                    np.format_float_positional(val, decimals, trim='-')
-                )
-                pos.append((val / scale, ranges[next_axis].start, 0))
+                continue
+            axis_values = values[axis]
+            ticks.color = self.color
+            ticks.opacity = self._opacity
+            ticks.font_size = self.font_size
+            ticks.visible = axis_values.size > 0
             # this runs on every camera move in 2D, and updating text
             # visuals is costly, so skip it when nothing changed. Text
             # can't take empty positions, so leave it as is when hidden
-            if values.size and (text, pos) != self._tick_cache[axis]:
-                self._tick_cache[axis] = (text, pos)
-                ticks.text = text
-                ticks.pos = pos
-            ticks.color = self.color
-            ticks.opacity = self._opacity
-            ticks.visible = len(values) > 0
-            ticks.font_size = self.font_size
-
-    def set_axis_labels(
-        self, show_labels: bool, ranges: list[RangeTuple], labels: list[str]
-    ) -> None:
-        ndim = len(ranges)
-        for axis in range(ndim):
-            next_axis = (axis + 1) % ndim
-            visual = self.axis_labels[axis]
-            visual.text = labels[axis]
-            visual.pos = (
-                (ranges[axis].start + ranges[axis].stop) / 2,
-                ranges[next_axis].start,
-                0,
+            if not axis_values.size:
+                continue
+            shown_values, *shown_format = self._ticks[axis]
+            tick_format = [scales[axis], decimals[axis]]
+            text_changed = not (
+                tick_format == shown_format
+                and np.array_equal(axis_values, shown_values)
             )
+            if text_changed:
+                self._ticks[axis] = (axis_values, *tick_format)
+                ticks.text = [
+                    np.format_float_positional(val, decimals[axis], trim='-')
+                    for val in axis_values
+                ]
+                # ticks are moved to the edge of the grid by their transform
+                ticks.pos = [(val / scales[axis], 0, 0) for val in axis_values]
+            # measuring is slow too, so only do it when sizes can change
+            key = (*tick_format, self.font_size)
+            if text_changed or key != self._tick_sizes[axis][0]:
+                self._update_tick_size(axis, key)
+
+    def _update_tick_size(self, axis: int, key: tuple) -> None:
+        """Measure tick labels, keeping the largest size until `key` changes.
+
+        Labels are spaced by this size, and keeping the largest one stops
+        them from moving back and forth while panning shows ticks of
+        different widths (e.g. 2653.5 and 2654.25).
+        """
+        ticks = self.tick_labels[axis]
+        size = (ticks.get_width_height()[0], ticks.get_line_height())
+        shown_key, shown_size = self._tick_sizes[axis]
+        if key == shown_key:
+            size = (max(size[0], shown_size[0]), max(size[1], shown_size[1]))
+        self._tick_sizes[axis] = (key, size)
+
+    def set_axis_labels(self, show_labels: bool, labels: list[str]) -> None:
+        for axis, visual in enumerate(self.axis_labels):
+            if axis >= len(labels):
+                continue
+            # setting text lays it out again, even if it's the same
+            if visual.text != labels[axis]:
+                visual.text = labels[axis]
             visual.color = self.color
             visual.opacity = self._opacity
             visual.font_size = self.font_size * 1.5
