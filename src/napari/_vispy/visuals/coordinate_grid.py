@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -12,6 +13,8 @@ from napari.components.dims import RangeTuple
 from napari.utils._units import compute_nice_ticks
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from vispy.visuals.filters.clipper import Clipper
 
     from napari._vispy.utils.qt_font import FontInfo
@@ -222,11 +225,13 @@ class CoordinateGrid(Node):
         n_ticks: int,
         ranges: list[RangeTuple],
         scales: list[float] | None = None,
+        formatters: list[Callable[[float, int], str]] | None = None,
     ) -> None:
         """Update tick labels.
 
         `scales` converts each axis from world coordinates to the units
-        shown in the labels (e.g. 1e9 to label meters in nm).
+        shown in the labels (e.g. 1e9 to label meters in nm). `formatters`
+        turn each axis' tick values and needed decimals into text.
         """
         if not show_ticks:
             for ticks in self.tick_labels:
@@ -235,6 +240,10 @@ class CoordinateGrid(Node):
 
         if scales is None:
             scales = [1.0] * len(ranges)
+        if formatters is None:
+            formatters = [partial(np.format_float_positional, trim='-')] * len(
+                ranges
+            )
 
         ndim = len(ranges)
         for axis in range(ndim):
@@ -250,9 +259,7 @@ class CoordinateGrid(Node):
             text = []
             pos = []
             for val in values:
-                text.append(
-                    np.format_float_positional(val, decimals, trim='-')
-                )
+                text.append(formatters[axis](val, decimals))
                 pos.append((val / scale, ranges[next_axis].start, 0))
             ticks.text = text
             ticks.pos = pos

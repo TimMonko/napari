@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -8,11 +9,47 @@ from napari._vispy.overlays.base import ViewerOverlayMixin, VispySceneOverlay
 from napari._vispy.visuals.coordinate_grid import CoordinateGrid
 from napari.components.dims import RangeTuple
 from napari.settings import get_settings
-from napari.utils._units import compact_unit
+from napari.utils._units import (
+    compact_unit,
+    format_unit,
+    get_unit_registry,
+)
 
 if TYPE_CHECKING:
     from napari._vispy.utils.qt_font import FontInfo
     from napari.components.overlays import CoordinateGridOverlay
+
+
+# map conventions for axes named after geographic coordinates
+_HEMISPHERES = {
+    'latitude': ('N', 'S'),
+    'lat': ('N', 'S'),
+    'longitude': ('E', 'W'),
+    'lon': ('E', 'W'),
+    'long': ('E', 'W'),
+}
+_PROJECTED = {'easting', 'northing'}
+
+TickFormatter = Callable[[float, int], str]
+
+
+def _format_tick(value: float, decimals: int) -> str:
+    return np.format_float_positional(value, decimals, trim='-')
+
+
+def _hemisphere_formatter(positive: str, negative: str) -> TickFormatter:
+    """Format degrees with a hemisphere letter, e.g. 78°W, not -78."""
+
+    def format_tick(value: float, decimals: int) -> str:
+        suffix = positive if value > 0 else negative if value < 0 else ''
+        return f'{_format_tick(abs(value), decimals)}°{suffix}'
+
+    return format_tick
+
+
+def _format_projected_tick(value: float, decimals: int) -> str:
+    """Format a projected coordinate in full, e.g. 2,640,000."""
+    return f'{value:,.{decimals}f}'
 
 
 class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
@@ -62,7 +99,7 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
 
     def _get_ranges_and_axis_labels(
         self,
-    ) -> tuple[list[RangeTuple], list[str], list[float]]:
+    ) -> tuple[list[RangeTuple], list[str], list[float], list[TickFormatter]]:
         # napari dims are zyx, but vispy uses xyz
         displayed = self.viewer.dims.displayed[::-1]
         ranges = [self.viewer.dims.range[i] for i in displayed]
@@ -70,22 +107,37 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
 
         units = ['' for _ in displayed]
         scales = [1.0 for _ in displayed]
+        formatters: list[TickFormatter] = [_format_tick for _ in displayed]
         if self.viewer.layers.units is not None:
+            reg = get_unit_registry()
             for axis, (dim, range_) in enumerate(
                 zip(displayed, ranges, strict=True)
             ):
-                # prefix the unit like the scale bar does (e.g. m -> nm)
-                unit, scales[axis] = compact_unit(
-                    self.viewer.layers.units[dim], range_.stop - range_.start
-                )
-                # see https://pint.readthedocs.io/en/stable/user/formatting.html
-                units[axis] = f' ({unit:~#P})'
+                unit = self.viewer.layers.units[dim]
+                name = axis_labels[axis].lower()
+                if name in _HEMISPHERES and unit == reg.degree:
+                    # like a map: 78°W, and the ticks already say degrees
+                    formatters[axis] = _hemisphere_formatter(
+                        *_HEMISPHERES[name]
+                    )
+                    continue
+                if name in _PROJECTED and unit.dimensionality == (
+                    reg.meter.dimensionality
+                ):
+                    # like GIS grids: full coordinates in the CRS unit
+                    formatters[axis] = _format_projected_tick
+                else:
+                    # prefix the unit like the scale bar does (e.g. m -> nm)
+                    unit, scales[axis] = compact_unit(
+                        unit, range_.stop - range_.start
+                    )
+                units[axis] = f' ({format_unit(unit)})'
 
         axis_labels_with_units = [
             f'{lab}{unit}'
             for lab, unit in zip(axis_labels, units, strict=True)
         ]
-        return ranges, axis_labels_with_units, scales
+        return ranges, axis_labels_with_units, scales, formatters
 
     def _on_unit_change(self) -> None:
         # NOTE: this is also called by VispyCanvas when layer units are updated
@@ -106,7 +158,7 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
         self._on_ticks_change()
 
     def _on_axis_labels_change(self) -> None:
-        ranges, axis_labels, _ = self._get_ranges_and_axis_labels()
+        ranges, axis_labels, _, _ = self._get_ranges_and_axis_labels()
         self.node.set_axis_labels(
             self.overlay.axis_labels, ranges, axis_labels
         )
@@ -115,16 +167,20 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
         self._on_view_direction_change()
 
     def _on_ticks_change(self) -> None:
-        ranges, _, scales = self._get_ranges_and_axis_labels()
+        ranges, _, scales, formatters = self._get_ranges_and_axis_labels()
         self.node.set_ticks(
-            self.overlay.tick_labels, self.overlay.n_ticks, ranges, scales
+            self.overlay.tick_labels,
+            self.overlay.n_ticks,
+            ranges,
+            scales,
+            formatters,
         )
         # needed to ensure new grids/ticks are up to date
         self._on_blending_change()
         self._on_view_direction_change()
 
     def _on_extent_change(self) -> None:
-        ranges, _, _ = self._get_ranges_and_axis_labels()
+        ranges, _, _, _ = self._get_ranges_and_axis_labels()
         self.node.set_extents(ranges)
         self._on_ticks_change()
         self._on_axis_labels_change()
