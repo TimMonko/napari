@@ -482,6 +482,12 @@ def test_crosshair_drawn_at_cursor(make_napari_viewer):
     moved = red_pixels()
     assert int(np.argmax(moved.sum(axis=0))) != col
 
+    # wider lines cover more rows at the left edge (horizontal line only)
+    thin = moved[:, :5].any(axis=1).sum()
+    crosshair.width = 10
+    thick = red_pixels()[:, :5].any(axis=1).sum()
+    assert thick >= thin + 5
+
 
 @skip_on_win_ci
 @skip_local_popups
