@@ -221,19 +221,31 @@ class CoordinateGrid(Node):
         show_ticks: bool,
         n_ticks: int,
         ranges: list[RangeTuple],
+        scales: list[float] | None = None,
     ) -> None:
+        """Update tick labels.
+
+        `scales` converts each axis from world coordinates to the units
+        shown in the labels (e.g. 1e9 to label meters in nm).
+        """
         if not show_ticks:
             for ticks in self.tick_labels:
                 ticks.visible = False
             return
 
+        if scales is None:
+            scales = [1.0] * len(ranges)
+
         ndim = len(ranges)
         for axis in range(ndim):
             next_axis = (axis + 1) % ndim
             ticks = self.tick_labels[axis]
-            # generate tick positions with round values
+            scale = scales[axis]
+            # generate tick positions with round values in the label units
             values, decimals = compute_nice_ticks(
-                ranges[axis].start, ranges[axis].stop, target_ticks=n_ticks
+                ranges[axis].start * scale,
+                ranges[axis].stop * scale,
+                target_ticks=n_ticks,
             )
             text = []
             pos = []
@@ -241,7 +253,7 @@ class CoordinateGrid(Node):
                 text.append(
                     np.format_float_positional(val, decimals, trim='-')
                 )
-                pos.append((val, ranges[next_axis].start, 0))
+                pos.append((val / scale, ranges[next_axis].start, 0))
             ticks.text = text
             ticks.pos = pos
             ticks.color = self.color

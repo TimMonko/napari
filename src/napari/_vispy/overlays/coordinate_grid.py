@@ -8,6 +8,7 @@ from napari._vispy.overlays.base import ViewerOverlayMixin, VispySceneOverlay
 from napari._vispy.visuals.coordinate_grid import CoordinateGrid
 from napari.components.dims import RangeTuple
 from napari.settings import get_settings
+from napari.utils._units import compact_unit
 
 if TYPE_CHECKING:
     from napari._vispy.utils.qt_font import FontInfo
@@ -61,30 +62,36 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
 
     def _get_ranges_and_axis_labels(
         self,
-    ) -> tuple[list[RangeTuple], list[str]]:
+    ) -> tuple[list[RangeTuple], list[str], list[float]]:
         # napari dims are zyx, but vispy uses xyz
         displayed = self.viewer.dims.displayed[::-1]
         ranges = [self.viewer.dims.range[i] for i in displayed]
         axis_labels = [self.viewer.dims.axis_labels[i] for i in displayed]
 
+        units = ['' for _ in displayed]
+        scales = [1.0 for _ in displayed]
         if self.viewer.layers.units is not None:
-            # see https://pint.readthedocs.io/en/stable/user/formatting.html
-            units = [
-                f' ({self.viewer.layers.units[i]:~#P})' for i in displayed
-            ]
-        else:
-            units = ['' for _ in displayed]
+            for axis, (dim, range_) in enumerate(
+                zip(displayed, ranges, strict=True)
+            ):
+                # prefix the unit like the scale bar does (e.g. m -> nm)
+                unit, scales[axis] = compact_unit(
+                    self.viewer.layers.units[dim], range_.stop - range_.start
+                )
+                # see https://pint.readthedocs.io/en/stable/user/formatting.html
+                units[axis] = f' ({unit:~#P})'
 
         axis_labels_with_units = [
             f'{lab}{unit}'
             for lab, unit in zip(axis_labels, units, strict=True)
         ]
-        return ranges, axis_labels_with_units
+        return ranges, axis_labels_with_units, scales
 
     def _on_unit_change(self) -> None:
         # NOTE: this is also called by VispyCanvas when layer units are updated
         #       so it doesn't need to be connected to events for that
         self._on_axis_labels_change()
+        self._on_ticks_change()
 
     def _on_font_size_change(self) -> None:
         # called by vispy canvas when global fonts are updated
@@ -99,7 +106,7 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
         self._on_ticks_change()
 
     def _on_axis_labels_change(self) -> None:
-        ranges, axis_labels = self._get_ranges_and_axis_labels()
+        ranges, axis_labels, _ = self._get_ranges_and_axis_labels()
         self.node.set_axis_labels(
             self.overlay.axis_labels, ranges, axis_labels
         )
@@ -108,16 +115,16 @@ class VispyCoordinateGridOverlay(ViewerOverlayMixin, VispySceneOverlay):
         self._on_view_direction_change()
 
     def _on_ticks_change(self) -> None:
-        ranges, _ = self._get_ranges_and_axis_labels()
+        ranges, _, scales = self._get_ranges_and_axis_labels()
         self.node.set_ticks(
-            self.overlay.tick_labels, self.overlay.n_ticks, ranges
+            self.overlay.tick_labels, self.overlay.n_ticks, ranges, scales
         )
         # needed to ensure new grids/ticks are up to date
         self._on_blending_change()
         self._on_view_direction_change()
 
     def _on_extent_change(self) -> None:
-        ranges, _ = self._get_ranges_and_axis_labels()
+        ranges, _, _ = self._get_ranges_and_axis_labels()
         self.node.set_extents(ranges)
         self._on_ticks_change()
         self._on_axis_labels_change()
