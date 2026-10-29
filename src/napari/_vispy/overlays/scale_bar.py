@@ -10,7 +10,11 @@ import pint
 
 from napari._vispy.overlays.base import ViewerOverlayMixin, VispyCanvasOverlay
 from napari._vispy.visuals.scale_bar import ScaleBar
-from napari.utils._units import PREFERRED_VALUES, compact_unit
+from napari.utils._units import (
+    PREFERRED_VALUES,
+    compact_unit,
+    format_quantity,
+)
 from napari.utils.notifications import show_warning
 
 if TYPE_CHECKING:
@@ -180,7 +184,7 @@ class VispyScaleBarOverlay(ViewerOverlayMixin, VispyCanvasOverlay):
         )
 
         # Update scalebar and text
-        self.node.text.text = f'{dim_with_unit:g~#P}'
+        self.node.text.text = format_quantity(dim_with_unit)
         self._on_rendering_change()
 
     def _on_rendering_change(self) -> None:

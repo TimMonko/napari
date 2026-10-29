@@ -123,14 +123,41 @@ def compact_unit(unit: 'pint.Unit', span: float) -> tuple['pint.Unit', float]:
     Returns
     -------
     compact : pint.Unit
-        Prefixed unit (e.g. nm for 2e-9 m). Same as `unit` if
-        `span` is zero or not finite.
+        Prefixed unit (e.g. nm for 2e-9 m). Same as `unit` if it is
+        dimensionless (including angles), or if `span` is zero or not
+        finite.
     factor : float
         Factor converting values in `unit` to `compact`.
     """
-    if span == 0 or not np.isfinite(span):
+    # angles are dimensionless in pint, and maps show decimal degrees
+    # rather than prefixed ones (0.5°, not 500 mdeg)
+    if span == 0 or not np.isfinite(span) or unit.dimensionless:
         return unit, 1.0
     compact = (abs(span) * unit).to_compact().units
     factor = (1 * unit).to(compact).magnitude
     # prefixes are powers of 10, so drop float noise (999999999.9999999)
     return compact, float(f'{factor:.15g}')
+
+
+# symbols that maps use for angles, instead of pint's deg/arcmin/arcsec
+# (prime and double prime, named as they look like quotes)
+_ANGLE_SYMBOLS = {
+    'deg': '°',
+    'arcmin': '\N{PRIME}',
+    'arcsec': '\N{DOUBLE PRIME}',
+}
+
+
+def format_unit(unit: 'pint.Unit') -> str:
+    """Get the abbreviated symbol of a unit, e.g. 'nm' or '°'."""
+    # see https://pint.readthedocs.io/en/stable/user/formatting.html
+    symbol = f'{unit:~P}'
+    return _ANGLE_SYMBOLS.get(symbol, symbol)
+
+
+def format_quantity(quantity: 'pint.Quantity') -> str:
+    """Format a quantity with its abbreviated unit, e.g. '5 nm' or '0.5°'."""
+    symbol = format_unit(quantity.units)
+    # angle symbols are written right after the number
+    separator = '' if symbol in _ANGLE_SYMBOLS.values() else ' '
+    return f'{quantity.magnitude:g}{separator}{symbol}'

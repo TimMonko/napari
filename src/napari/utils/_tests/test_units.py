@@ -4,6 +4,7 @@ import pytest
 from napari.utils._units import (
     compact_unit,
     compute_nice_ticks,
+    format_quantity,
     get_unit_registry,
 )
 
@@ -38,8 +39,8 @@ def test_compute_nice_ticks(
         ('nm', 1e-3, 'pm', 1e3),
         ('pixel', 2000, 'kilopixel', 1e-3),
         ('dimensionless', 1e-9, 'dimensionless', 1),
-        # angles are dimensionless in pint but still take prefixes
-        ('degree', 2e-3, 'millidegree', 1e3),
+        # angles are dimensionless in pint, and shown in decimal degrees
+        ('degree', 2e-3, 'degree', 1),
         ('m', 0, 'm', 1),
         ('m', float('inf'), 'm', 1),
     ],
@@ -50,3 +51,16 @@ def test_compact_unit(unit, span, expected_unit, expected_factor):
     assert compact == reg(expected_unit).units
     # exact, so that scaled tick values stay round
     assert factor == expected_factor
+
+
+@pytest.mark.parametrize(
+    ('quantity', 'expected'),
+    [
+        ('5 nm', '5 nm'),
+        ('0.5 degree', '0.5°'),
+        ('30 arcminute', '30\N{PRIME}'),
+        ('2 kilometer', '2 km'),
+    ],
+)
+def test_format_quantity(quantity, expected):
+    assert format_quantity(get_unit_registry()(quantity)) == expected

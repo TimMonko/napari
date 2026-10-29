@@ -50,3 +50,14 @@ def test_scale_bar_length_on_prefix_boundary(viewer_model: ViewerModel):
     length, quantity = vispy_scale_bar._calculate_best_length(1e-9)
     assert length == 1e-9
     assert quantity == 1 * quantity._REGISTRY.nm
+
+
+def test_scale_bar_degrees_are_not_prefixed(viewer_model: ViewerModel):
+    viewer_model.add_image(data=np.zeros((10, 10)), units='degree')
+    vispy_scale_bar = VispyScaleBarOverlay(
+        overlay=ScaleBarOverlay(), viewer=viewer_model, font_info=FontInfo()
+    )
+    vispy_scale_bar.overlay.visible = True
+    _, quantity = vispy_scale_bar._calculate_best_length(0.6)
+    assert quantity.units == quantity._REGISTRY.degree
+    assert quantity.magnitude == 0.5
