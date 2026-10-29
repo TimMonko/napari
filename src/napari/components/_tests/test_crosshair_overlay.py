@@ -10,6 +10,7 @@ def test_crosshair_overlay_defaults():
     crosshair = CrosshairOverlay()
     assert not crosshair.visible
     assert crosshair.gap == 20
+    assert crosshair.width == 1
     assert crosshair.opacity == pytest.approx(0.7)
     assert crosshair.color is None
 
@@ -56,3 +57,10 @@ def test_crosshair_gap_must_be_positive(gap):
     """Test the gap of the crosshair cannot be zero or negative"""
     with pytest.raises(ValidationError):
         CrosshairOverlay(gap=gap)
+
+
+@pytest.mark.parametrize('width', [0, -1])
+def test_crosshair_width_must_be_positive(width):
+    """Test the width of the crosshair cannot be zero or negative"""
+    with pytest.raises(ValidationError):
+        CrosshairOverlay(width=width)

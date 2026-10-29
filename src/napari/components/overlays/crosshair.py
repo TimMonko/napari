@@ -1,4 +1,4 @@
-from pydantic import Field, PositiveInt
+from pydantic import Field, PositiveFloat, PositiveInt
 
 from napari.components.overlays.base import SceneOverlay
 from napari.utils.color import ColorValue
@@ -18,6 +18,8 @@ class CrosshairOverlay(SceneOverlay):
         overlay.
     gap : int
         Diameter of the gap in the center of the crosshair, in canvas pixels.
+    width : float
+        Width of the crosshair lines, in canvas pixels.
     visible : bool
         If the overlay is visible or not.
     opacity : float
@@ -34,4 +36,5 @@ class CrosshairOverlay(SceneOverlay):
         Field(default=None, union_mode='left_to_right')
     )
     gap: PositiveInt = 20
+    width: PositiveFloat = 1.0
     opacity: float = 0.7
