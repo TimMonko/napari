@@ -1,4 +1,7 @@
+from types import SimpleNamespace
+
 import numpy as np
+import pytest
 from scipy import ndimage as ndi
 
 from napari.components.dims import Dims
@@ -439,3 +442,30 @@ def test_erase_3d_undo_empty():
 
     # Undo queue should be empty
     assert len(layer._undo_history) == 0
+
+
+@pytest.mark.parametrize(
+    'transforms',
+    [
+        {},
+        {'scale': (0.01, 0.01)},
+        {'affine': np.diag([0.01, 0.01, 1])},
+    ],
+)
+def test_brush_size_on_mouse_move_follows_cursor(transforms):
+    """Dragging by N canvas pixels must grow the brush by N canvas pixels."""
+    layer = Labels(np.zeros((20, 20), dtype=np.uint8), **transforms)
+    layer.brush_size = 10
+    data_to_world = np.abs(layer._data_to_world.scale[-1])
+    camera_zoom = 2 / data_to_world  # 2 canvas pixels per data pixel
+
+    def move(x):
+        event = SimpleNamespace(
+            modifiers=('Alt',), pos=(x, 0), camera_zoom=camera_zoom
+        )
+        layer.brush_size_on_mouse_move(layer, event)
+
+    move(0)
+    move(100)
+
+    assert layer.brush_size == 60

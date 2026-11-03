@@ -110,8 +110,11 @@ class BrushSizeOnMouseMove:
                 self.init_brush_size = layer.brush_size
                 layer.cursor = 'circle_frozen'
             else:
+                # canvas pixels to world units, then to data pixels
                 brush_size_delta = round(
-                    (pos[0] - self.init_pos[0]) / event.camera_zoom
+                    (pos[0] - self.init_pos[0])
+                    / event.camera_zoom
+                    / layer._min_displayed_scale
                 )
                 new_brush_size = self.init_brush_size + brush_size_delta
 

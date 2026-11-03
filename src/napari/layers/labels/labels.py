@@ -599,14 +599,16 @@ class Labels(ScalarFieldBase):
         self.cursor_size = self._calculate_cursor_size()
         self.events.brush_size()
 
+    @property
+    def _min_displayed_scale(self) -> float:
+        """Smallest data to world scale magnitude of the displayed axes."""
+        scale = self._data_to_world.scale
+        return np.min([abs(scale[d]) for d in self._slice_input.displayed])
+
     def _calculate_cursor_size(self) -> int:
         # Convert from brush size in data coordinates to
         # cursor size in world coordinates
-        scale = self._data_to_world.scale
-        min_scale = np.min(
-            [abs(scale[d]) for d in self._slice_input.displayed]
-        )
-        return abs(self.brush_size * min_scale)
+        return abs(self.brush_size * self._min_displayed_scale)
 
     def new_colormap(self, seed: int | None = None) -> None:
         if seed is None:
