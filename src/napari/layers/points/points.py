@@ -191,7 +191,8 @@ class Points(Layer):
     size : float, array
         Size of the point marker in data pixels. If given as a scalar, all points are made
         the same size. If given as an array, size must be the same or broadcastable
-        to the same shape as the data.
+        to the same shape as the data. Markers are always round on screen, using the
+        data to world scale of the last displayed axis, including any scale in `affine`.
     symbol : str, array
         Symbols to be used for the point markers. Must be one of the
         following: arrow, clobber, cross, diamond, disc, hbar, ring,
