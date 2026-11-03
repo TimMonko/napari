@@ -608,9 +608,8 @@ class Labels(ScalarFieldBase):
 
     @property
     def _min_displayed_scale(self) -> float:
-        """Smallest data to world scale magnitude of the displayed axes."""
-        scale = self._data_to_world.scale
-        return np.min([abs(scale[d]) for d in self._slice_input.displayed])
+        """Smallest data to viewer scale of the displayed axes."""
+        return np.min(self._data_to_viewer_scale[self._slice_input.displayed])
 
     def _update_cursor_size(self, event=None) -> None:
         """Recalculate the brush cursor if it is in use."""
@@ -1537,10 +1536,7 @@ class Labels(ScalarFieldBase):
                 Maximum (exclusive) indices for each painted dimension.
             Returns None if the brush operation is invalid.
         """
-        data_to_world_scale = self._data_to_world.scale
-        paint_scale = np.array(
-            [data_to_world_scale[i] for i in dims_to_paint], dtype=float
-        )
+        paint_scale = self._data_to_viewer_scale[list(dims_to_paint)]
 
         if self.n_edit_dimensions < self.ndim:
             coord_paint = np.array([coord[i] for i in dims_to_paint])
@@ -1553,8 +1549,7 @@ class Labels(ScalarFieldBase):
         # Radius in pixels for each dimension (accounting for scale)
         # Use floor to match old sphere_indices behavior: points where dist <= radius
         # means integer coordinates from -floor(radius) to +floor(radius)
-        normalized_scale = np.abs(paint_scale)
-        normalized_scale = normalized_scale / np.min(normalized_scale)
+        normalized_scale = paint_scale / np.min(paint_scale)
         radius_pixels = np.floor(radius / normalized_scale).astype(int)
 
         center = np.round(coord_paint).astype(int)

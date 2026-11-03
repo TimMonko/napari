@@ -2875,3 +2875,17 @@ def test_cursor_size_updates_on_displayed_axes_change():
     viewer.dims.order = (2, 0, 1)
 
     assert layer.cursor_size == pytest.approx(2)
+
+
+def test_cursor_size_uses_viewer_units():
+    from napari.components import ViewerModel
+
+    viewer = ViewerModel()
+    viewer.add_image(np.zeros((1000, 1000)), units=('um', 'um'))
+    layer = viewer.add_labels(
+        np.zeros((10, 10), dtype=np.uint8), units=('mm', 'mm')
+    )
+
+    layer.brush_size = 2
+
+    assert layer.cursor_size == pytest.approx(2000)
