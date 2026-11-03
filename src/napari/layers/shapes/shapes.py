@@ -2402,14 +2402,15 @@ class Shapes(Layer):
 
     @property
     def _normalized_scale_factor(self):
-        """Scale factor accounting for layer scale.
+        """Scale factor accounting for the data to world transform.
 
         This is often needed when calculating screen-space sizes and distances
         of vertices for interactivity (rescaling, adding vertices, etc).
-        We use only the magnitude of the layer scale, because sizes and
-        distances must remain positive.
+        The scale comes from the full data to world transform, so that it
+        includes both the layer scale and any scale in the affine. We use only
+        its magnitude, because sizes and distances must remain positive.
         """
-        return self.scale_factor / abs(self.scale[-1])
+        return self.scale_factor / abs(self._data_to_world.scale[-1])
 
     @property
     def _normalized_vertex_radius(self):

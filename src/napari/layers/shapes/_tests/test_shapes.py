@@ -2447,6 +2447,47 @@ def test_value_vertex_with_negative_scale(scale):
     assert layer.get_value((0, 0))[1] is not None
 
 
+def _rotated_scale_affine(angle_degrees, scale):
+    """Return a 2D affine matrix that scales uniformly, then rotates."""
+    angle = np.deg2rad(angle_degrees)
+    cos, sin = np.cos(angle), np.sin(angle)
+    return np.array(
+        [
+            [scale * cos, -scale * sin, 0],
+            [scale * sin, scale * cos, 0],
+            [0, 0, 1],
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    'transforms',
+    [
+        {'scale': (0.01, 0.01)},
+        {'affine': np.diag([0.01, 0.01, 1])},
+        {'affine': np.diag([0.01, -0.01, 1])},
+        {'scale': (0.1, 0.1), 'affine': np.diag([0.1, 0.1, 1])},
+        {'affine': _rotated_scale_affine(30, 0.01)},
+    ],
+)
+def test_value_vertex_near_cursor_with_transform(transforms):
+    """Vertices must be grabbable from the same screen distance.
+
+    The vertex radius is a screen-space size, so it must account for every
+    transform between data and world, not only the layer scale.
+    """
+    layer = Shapes([[[0, 0], [0, 100], [100, 100], [100, 0]]], **transforms)
+    layer.mode = 'direct'
+    layer.selected_data = {0}
+    world_per_canvas_pixel = 0.002
+    layer._scale_factor = world_per_canvas_pixel
+
+    vertex = np.array(layer.data_to_world((0, 0)))
+    click = vertex + 2 * world_per_canvas_pixel
+
+    assert layer.get_value(click, world=True) == (0, 0)
+
+
 def test_value_non_convex():
     """Test getting the value of the data at the current coordinates."""
     data = [
