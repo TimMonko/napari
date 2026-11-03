@@ -2407,10 +2407,15 @@ class Shapes(Layer):
         This is often needed when calculating screen-space sizes and distances
         of vertices for interactivity (rescaling, adding vertices, etc).
         The scale comes from the full data to world transform, so that it
-        includes both the layer scale and any scale in the affine. We use only
-        its magnitude, because sizes and distances must remain positive.
+        includes both the layer scale and any scale in the affine. We use the
+        last displayed axis, because the scale of a hidden axis does not affect
+        what is on screen, and only its magnitude, because sizes and distances
+        must remain positive.
         """
-        return self.scale_factor / abs(self._data_to_world.scale[-1])
+        last_displayed = self._slice_input.displayed[-1]
+        return self.scale_factor / abs(
+            self._data_to_world.scale[last_displayed]
+        )
 
     @property
     def _normalized_vertex_radius(self):

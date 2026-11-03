@@ -2488,6 +2488,27 @@ def test_value_vertex_near_cursor_with_transform(transforms):
     assert layer.get_value(click, world=True) == (0, 0)
 
 
+def test_value_vertex_with_scale_on_non_displayed_axis():
+    """The vertex radius must not depend on the scale of a hidden axis."""
+    viewer = ViewerModel()
+    layer = viewer.add_shapes(
+        [[0, 0, 5], [0, 100, 5], [100, 100, 5], [100, 0, 5]],
+        shape_type='rectangle',
+        scale=(1, 1, 100),
+    )
+    viewer.dims.order = (2, 0, 1)
+    viewer.dims.point = (0, 0, 500)
+    layer.mode = 'direct'
+    layer.selected_data = {0}
+    world_per_canvas_pixel = 0.1
+    layer._scale_factor = world_per_canvas_pixel
+
+    vertex = np.array(layer.data_to_world((0, 0, 5)))
+    click = vertex + 2 * world_per_canvas_pixel * np.array([1, 1, 0])
+
+    assert layer.get_value(click, world=True) == (0, 0)
+
+
 def test_value_non_convex():
     """Test getting the value of the data at the current coordinates."""
     data = [
