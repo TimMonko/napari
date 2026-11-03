@@ -330,3 +330,15 @@ def test_loaded_event():
     layer._slicing_state._set_unloaded_slice_id(1)
     layer._slicing_state._update_loaded_slice_id(1)
     assert mock.call_count == 2
+
+
+def test_status_coordinates_account_for_affine():
+    from napari.layers import Image
+
+    def coords(**transforms):
+        layer = Image(np.zeros((100, 100)), **transforms)
+        return layer.get_status((0.123, 0.456), world=True)['coords']
+
+    assert coords(affine=np.diag([0.01, 0.01, 1])) == coords(
+        scale=(0.01, 0.01)
+    )
