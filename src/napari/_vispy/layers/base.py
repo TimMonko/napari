@@ -237,16 +237,16 @@ class VispyBaseLayer(ABC, Generic[_L]):
             # Use the rendered level's downsample factor: 3D shows the
             # lowest level by default, but locked_data_level (and 3D
             # sub-volume tiles) can select any level. The data-space
-            # offset is mapped to world units with the layer scale.
-            layer_scale = np.asarray(self.layer.scale)[dims_displayed][::-1]
+            # offset is mapped to world units with the data to world transform.
             data_level: int = getattr(self.layer, 'data_level', 0)
             # grab the downscale factors for this level
             level_factors = self.layer.downsample_factors[data_level]
-            # keep only the displayed factors, then invert to match VisPy
-            # axis ordering
-            displayed_downsample = level_factors[dims_displayed][::-1]
-            # finally, adjust translate by half a pixel per downscale level
-            translate += (displayed_downsample - 1) / 2 * layer_scale
+            # half a pixel per downscale level, for the displayed dims
+            data_offset = (level_factors[dims_displayed] - 1) / 2
+            data_to_world = self.layer._data_to_world.set_slice(dims_displayed)
+            world_offset = data_to_world.linear_matrix @ data_offset
+            # invert to match VisPy axis ordering, and adjust translate
+            translate += world_offset[::-1] * units_scale
 
         # Embed in the top left corner of a 4x4 affine matrix
         affine_matrix = np.eye(4)
