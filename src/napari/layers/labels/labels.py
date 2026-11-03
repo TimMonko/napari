@@ -605,6 +605,20 @@ class Labels(ScalarFieldBase):
         scale = self._data_to_world.scale
         return np.min([abs(scale[d]) for d in self._slice_input.displayed])
 
+    def _update_cursor_size(self) -> None:
+        """Recalculate the brush cursor if it is in use."""
+        if self._mode in {Mode.PAINT, Mode.ERASE}:
+            self.cursor_size = self._calculate_cursor_size()
+
+    def _slice_dims(self, dims, force: bool = False) -> None:
+        super()._slice_dims(dims, force)
+        self._update_cursor_size()
+
+    def refresh(self, event=None, **kwargs) -> None:
+        # transform setters refresh the layer, but do not slice it
+        super().refresh(event, **kwargs)
+        self._update_cursor_size()
+
     def _calculate_cursor_size(self) -> int:
         # Convert from brush size in data coordinates to
         # cursor size in world coordinates
