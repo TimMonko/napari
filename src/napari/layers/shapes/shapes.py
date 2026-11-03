@@ -2422,6 +2422,17 @@ class Shapes(Layer):
         """Vertex radius normalized to screen space."""
         return self._vertex_size * self._normalized_scale_factor / 2
 
+    @property
+    def _displayed_vertex_radii(self) -> np.ndarray:
+        """Vertex radius in data coordinates along each displayed axis.
+
+        Vertices have the same size on screen along every axis, but the data
+        to world scale can differ between axes.
+        """
+        displayed = self._slice_input.displayed
+        displayed_scale = np.abs(self._data_to_world.scale[displayed])
+        return self._vertex_size * self.scale_factor / 2 / displayed_scale
+
     def _set_view_slice(self):
         """Set the view given the slicing indices."""
         view_changed = False
@@ -3056,12 +3067,6 @@ class Shapes(Layer):
         selected_index = self._selected_data_in_view
 
         if len(selected_index) > 0:
-            self.scale[self._slice_input.displayed]
-            # Get the vertex sizes. They need to be rescaled by a few parameters:
-            # - scale_factor, because vertex sizes are zoom-invariant
-            # - scale, because vertex sizes are not affected by scale (unlike in Points)
-            # - 2, because the radius is what we need
-
             if self._mode == Mode.SELECT and self._selected_box is not None:
                 # Check if inside vertex of interaction box or rotation handle
                 box = self._selected_box[Box.WITH_HANDLE]
@@ -3069,7 +3074,7 @@ class Shapes(Layer):
 
                 # Check if any matching vertices
                 matches = np.all(
-                    distances <= self._normalized_vertex_radius, axis=1
+                    distances <= self._displayed_vertex_radii, axis=1
                 ).nonzero()
                 if len(matches[0]) > 0:
                     value = (selected_index[0], matches[0][-1])
@@ -3088,7 +3093,7 @@ class Shapes(Layer):
 
                 # Check if any matching vertices
                 matches = np.all(
-                    distances <= self._normalized_vertex_radius, axis=1
+                    distances <= self._displayed_vertex_radii, axis=1
                 ).nonzero()[0]
                 if len(matches) > 0:
                     index = selected_vertex_mask.nonzero()[0][matches[-1]]

@@ -2509,6 +2509,24 @@ def test_value_vertex_with_scale_on_non_displayed_axis():
     assert layer.get_value(click, world=True) == (0, 0)
 
 
+@pytest.mark.parametrize(
+    'transforms',
+    [{'scale': (0.01, 0.02)}, {'affine': np.diag([0.01, 0.02, 1])}],
+)
+def test_value_vertex_near_cursor_with_anisotropic_transform(transforms):
+    """The screen-space vertex radius must be the same along each axis."""
+    layer = Shapes([[[0, 0], [0, 100], [100, 100], [100, 0]]], **transforms)
+    layer.mode = 'direct'
+    layer.selected_data = {0}
+    world_per_canvas_pixel = 0.002
+    layer._scale_factor = world_per_canvas_pixel
+
+    vertex = np.array(layer.data_to_world((0, 0)))
+    click = vertex + 4 * world_per_canvas_pixel
+
+    assert layer.get_value(click, world=True) == (0, 0)
+
+
 def test_value_non_convex():
     """Test getting the value of the data at the current coordinates."""
     data = [
