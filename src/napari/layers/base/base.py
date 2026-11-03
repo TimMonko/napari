@@ -473,8 +473,9 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
     scale : tuple of float
         Scale factors for the layer.
     scale_factor : float
-        Conversion factor from canvas coordinates to image coordinates, which
-        depends on the current zoom level.
+        Size of one canvas pixel in world coordinates, which depends on the
+        current zoom level. To compare it with data coordinates, it needs
+        converting with the full data to world transform, not only `scale`.
     shear : 1-D array or n-D array
         Either a vector of upper triangular values, or an nD shear matrix with
         ones along the main diagonal.
@@ -1062,7 +1063,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
 
     @property
     def scale_factor(self) -> float:
-        """float: Conversion factor from canvas coordinates to image coordinates."""
+        """float: Size of one canvas pixel in world coordinates."""
         return self._scale_factor
 
     @scale_factor.setter
