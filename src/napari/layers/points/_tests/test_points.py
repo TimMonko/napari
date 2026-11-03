@@ -14,6 +14,7 @@ from napari._tests.utils import (
     assert_layer_state_equal,
     check_layer_world_data_extent,
 )
+from napari.components import ViewerModel
 from napari.components.dims import Dims
 from napari.layers import Points
 from napari.layers.base._base_constants import ActionType
@@ -2746,3 +2747,24 @@ def test_value_with_anisotropic_transform(transforms):
     assert layer.get_value(center + [0, 20], world=True) == 0
     assert layer.get_value(center + [30, 0], world=True) is None
     assert layer.get_value(center + [0, 30], world=True) is None
+
+
+def test_value_with_scale_on_non_displayed_axis():
+    """The hit area must not depend on the scale of a hidden axis."""
+    viewer = ViewerModel()
+    layer = viewer.add_points([[0, 0, 5]], size=10, scale=(1, 1, 100))
+    viewer.dims.order = (2, 0, 1)
+    viewer.dims.point = (0, 0, 500)
+
+    assert layer.get_value((4, 0, 500), world=True) == 0
+    assert layer.get_value((6, 0, 500), world=True) is None
+
+
+def test_value_with_viewer_units():
+    """The hit area must follow the point when converted to viewer units."""
+    viewer = ViewerModel()
+    viewer.add_image(np.zeros((1000, 1000)), units=('um', 'um'))
+    layer = viewer.add_points([[0, 0]], size=10, units=('mm', 'mm'))
+
+    assert layer.get_value((4000, 0), world=True) == 0
+    assert layer.get_value((6000, 0), world=True) is None
