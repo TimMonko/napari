@@ -388,3 +388,15 @@ def test_transform_box_handle_uses_viewer_units():
         layer._overlays['transform_box'].selected_handle
         == InteractionBoxHandle.TOP_LEFT
     )
+
+
+def test_status_coordinates_account_for_affine():
+    from napari.layers import Image
+
+    def coords(**transforms):
+        layer = Image(np.zeros((100, 100)), **transforms)
+        return layer.get_status((0.123, 0.456), world=True)['coords']
+
+    assert coords(affine=np.diag([0.01, 0.01, 1])) == coords(
+        scale=(0.01, 0.01)
+    )

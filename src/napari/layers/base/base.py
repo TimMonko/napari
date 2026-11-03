@@ -2289,7 +2289,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
         return source_str
 
     def _use_integer_coords_in_status(self) -> bool:
-        """If scale, translation, and units are default, use int coords.
+        """If the data to world transform and units are default, use int coords.
 
         This matches the legacy behavior of the viewer status bar and is
         probably close to what users want, especially for images, in the case
@@ -2297,9 +2297,10 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
 
         See https://github.com/napari/napari/pull/9287 for further discussion.
         """
+        data_to_world = self._data_to_world
         return bool(
-            np.all(np.asarray(self.scale) == 1)
-            and np.all(np.asarray(self.translate) == 0)
+            np.array_equal(data_to_world.linear_matrix, np.eye(self.ndim))
+            and np.all(data_to_world.translate == 0)
             and all(
                 unit == pint.get_application_registry().pixel
                 for unit in self.units
@@ -2363,7 +2364,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
             # - we convert to int because it needs to be int to be used in a
             #   format string.
             precision = int(
-                max(np.max(np.ceil(-np.log10(np.abs(self.scale)))), -2) + 2
+                max(np.max(np.ceil(-np.log10(self._data_to_viewer_scale))), -2)
+                + 2
             )
             position = np.asarray(position)
             value = self.get_value(
