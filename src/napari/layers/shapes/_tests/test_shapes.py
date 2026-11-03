@@ -3000,3 +3000,22 @@ def test_outline_not_drawn_off_slice():
     layer.selected_data = set()
     layer._value = (0, None)
     assert layer._outline_shapes() == (None, None)  # hover-only path
+
+
+def test_value_vertex_near_cursor_with_viewer_units():
+    """The vertex radius must account for conversion to viewer units."""
+    viewer = ViewerModel()
+    viewer.add_image(np.zeros((1000, 1000)), units=('um', 'um'))
+    layer = viewer.add_shapes(
+        [[0, 0], [0, 100], [100, 100], [100, 0]],
+        shape_type='rectangle',
+        units=('mm', 'mm'),
+    )
+    layer.mode = 'direct'
+    layer.selected_data = {0}
+    world_per_canvas_pixel = 100
+    layer._scale_factor = world_per_canvas_pixel
+
+    click = 2 * world_per_canvas_pixel * np.ones(2)
+
+    assert layer.get_value(click, world=True) == (0, 0)
