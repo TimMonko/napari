@@ -32,7 +32,8 @@ def highlight_box_handles(layer: Layer, event: Event) -> None:
     world_to_data = (
         layer._transforms[1:].set_slice(layer._slice_input.displayed).inverse
     )
-    pos = np.array(world_to_data(event.position))[event.dims_displayed]
+    position = layer._viewer_to_layer_units(event.position)
+    pos = np.array(world_to_data(position))[event.dims_displayed]
     handle_coords = generate_transform_box_from_layer(
         layer,
         layer._slice_input.displayed,  # pyrefly: ignore [bad-argument-type]
@@ -184,7 +185,9 @@ def transform_with_box(
     simplified = layer._transforms[1:].simplified
     initial_data_to_world = simplified.set_slice(layer._slice_input.displayed)
     initial_world_to_data = initial_data_to_world.inverse
-    initial_mouse_pos = np.array(event.position)[event.dims_displayed]
+    initial_mouse_pos = layer._viewer_to_layer_units(event.position)[
+        event.dims_displayed
+    ]
     initial_mouse_pos_data = initial_world_to_data(initial_mouse_pos)
 
     initial_handle_coords_data = generate_transform_box_from_layer(
@@ -224,7 +227,9 @@ def transform_with_box(
     yield
 
     while event.type == 'mouse_move':
-        mouse_pos = np.array(event.position)[event.dims_displayed]
+        mouse_pos = layer._viewer_to_layer_units(event.position)[
+            event.dims_displayed
+        ]
 
         if nearby_handle == InteractionBoxHandle.INSIDE:
             _translate_with_box(
