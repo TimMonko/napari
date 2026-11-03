@@ -3,7 +3,7 @@ import pytest
 
 from napari._vispy.layers.points import VispyPointsLayer
 from napari._vispy.utils.qt_font import FontInfo
-from napari.components import Dims
+from napari.components import Dims, ViewerModel
 from napari.layers import Points
 from napari.layers.points._points_constants import PointsProjectionMode
 
@@ -209,3 +209,13 @@ def test_marker_size_updates_on_affine_change():
     layer.affine = np.diag([0.5, 0.5, 1])
 
     assert vispy_layer.node.points_markers._data['a_size'][0] == 5
+
+
+def test_marker_size_ignores_scale_on_non_displayed_axis():
+    viewer = ViewerModel()
+    layer = viewer.add_points([[0, 0, 5]], size=10, scale=(1, 1, 100))
+    viewer.dims.order = (2, 0, 1)
+    viewer.dims.point = (0, 0, 500)
+    vispy_layer = VispyPointsLayer(layer, font_info=FontInfo())
+
+    assert vispy_layer.node.points_markers._data['a_size'][0] == 10

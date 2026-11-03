@@ -70,8 +70,7 @@ class VispyPointsLayer(VispyBaseLayer):
 
         set_data = self.node.points_markers.set_data
 
-        # use only last dimension to scale point sizes, see #5582
-        scale = abs(self.layer._data_to_world.scale[-1])
+        scale = self.layer._size_to_viewer_scale
         scaled_size = size * scale
 
         if self.layer.border_width_is_relative:
@@ -126,7 +125,7 @@ class VispyPointsLayer(VispyBaseLayer):
             symbol = ['o']
             border_width = np.empty(0)
 
-        scale = abs(self.layer._data_to_world.scale[-1])
+        scale = self.layer._size_to_viewer_scale
         highlight_thickness = settings.appearance.highlight.highlight_thickness
         scaled_size = (size + border_width) * scale
         # cap scaled_highlight to the marker size, cause otherwise we get strange effects
