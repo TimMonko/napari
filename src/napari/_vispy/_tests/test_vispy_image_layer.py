@@ -346,3 +346,27 @@ def test_changing_data_dimensionality_updates_units_scale():
     # Changing back to 2D should also work
     image.data = np.zeros((10, 10))
     assert len(vispy_image._world_to_layer_units_scale) == image.ndim
+
+
+@pytest.mark.parametrize(
+    'transforms',
+    [
+        {'scale': (0.01, 0.02, 0.04)},
+        {'affine': np.diag([0.01, 0.02, 0.04, 1])},
+        {'scale': (0.1, 0.1, 0.1), 'affine': np.diag([0.1, 0.2, 0.4, 1])},
+    ],
+)
+def test_3d_multiscale_offset_accounts_for_transform(transforms):
+    """The half-voxel offset must not depend on where the scale is held."""
+    data = [np.zeros((64, 64, 64)), np.zeros((32, 32, 32))]
+    image = Image(data, **transforms)
+    vispy_image = VispyImageLayer(image, font_info=FontInfo())
+    image._slice_dims(Dims(ndim=3, ndisplay=3))
+
+    image._data_level = 1
+    vispy_image._on_matrix_change()
+
+    # (2 - 1) / 2 pixel offset at each scale, in VisPy axis order
+    npt.assert_array_almost_equal(
+        vispy_image.node.transform.matrix[-1, :3], [0.02, 0.01, 0.005]
+    )
