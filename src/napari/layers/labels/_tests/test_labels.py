@@ -2844,3 +2844,34 @@ def test_paint_brush_accounts_for_affine():
     np.testing.assert_array_equal(
         paint(affine=np.diag([1, 4, 1])), paint(scale=(1, 4))
     )
+
+
+@pytest.mark.parametrize(
+    'transform',
+    [{'scale': (2, 2)}, {'affine': np.diag([2.0, 2.0, 1.0])}],
+)
+def test_cursor_size_updates_on_transform_change(transform):
+    layer = Labels(np.zeros((10, 10), dtype=np.uint8))
+    layer.brush_size = 4
+    layer.mode = 'paint'
+
+    for name, value in transform.items():
+        setattr(layer, name, value)
+
+    assert layer.cursor_size == pytest.approx(8)
+
+
+def test_cursor_size_updates_on_displayed_axes_change():
+    from napari.components import ViewerModel
+
+    viewer = ViewerModel()
+    layer = viewer.add_labels(
+        np.zeros((10, 10, 10), dtype=np.uint8), scale=(1, 4, 4)
+    )
+    layer.brush_size = 2
+    layer.mode = 'paint'
+    assert layer.cursor_size == pytest.approx(8)
+
+    viewer.dims.order = (2, 0, 1)
+
+    assert layer.cursor_size == pytest.approx(2)

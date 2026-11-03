@@ -474,6 +474,13 @@ class Labels(ScalarFieldBase):
 
         self._iso_gradient_mode = IsoCategoricalGradientMode(iso_gradient_mode)
 
+        for transform_event in (
+            self.events.scale,
+            self.events.rotate,
+            self.events.shear,
+            self.events.affine,
+        ):
+            transform_event.connect(self._update_cursor_size)
         self._selected_label = 1
         self.colormap.selection = self._selected_label
         self.colormap.use_selection = self._show_selected_label
@@ -604,6 +611,15 @@ class Labels(ScalarFieldBase):
         """Smallest data to world scale magnitude of the displayed axes."""
         scale = self._data_to_world.scale
         return np.min([abs(scale[d]) for d in self._slice_input.displayed])
+
+    def _update_cursor_size(self, event=None) -> None:
+        """Recalculate the brush cursor if it is in use."""
+        if self._mode in {Mode.PAINT, Mode.ERASE}:
+            self.cursor_size = self._calculate_cursor_size()
+
+    def _slice_dims(self, dims, force: bool = False) -> None:
+        super()._slice_dims(dims, force)
+        self._update_cursor_size()
 
     def _calculate_cursor_size(self) -> int:
         # Convert from brush size in data coordinates to
