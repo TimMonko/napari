@@ -1748,6 +1748,9 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
     ) -> np.ndarray[tuple[int], np.dtype[np.floating]]:
         """Convert from world coordinates to data coordinates.
 
+        World coordinates use the units shared by the layers in the viewer,
+        which can differ from the units of this layer.
+
         Parameters
         ----------
         position : tuple, list, 1D array
@@ -1767,10 +1770,13 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
             coords = [0] * (self.ndim - len(position)) + list(position)
 
         simplified = self._transforms[1:].simplified
-        return simplified.inverse(coords)
+        return simplified.inverse(self._viewer_to_layer_units(coords))
 
     def data_to_world(self, position):
         """Convert from data coordinates to world coordinates.
+
+        World coordinates use the units shared by the layers in the viewer,
+        which can differ from the units of this layer.
 
         Parameters
         ----------
@@ -1789,7 +1795,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
         else:
             coords = [0] * (self.ndim - len(position)) + list(position)
 
-        return tuple(self._transforms[1:].simplified(coords))
+        world_in_layer_units = self._transforms[1:].simplified(coords)
+        return tuple(world_in_layer_units * self._layer_to_viewer_units)
 
     def _world_to_displayed_data(
         self, position: np.ndarray, dims_displayed: list[int]
@@ -1822,10 +1829,53 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
         other transform properties in the following order:
 
         affine * (rotate * shear * scale + translate)
+
+        The result is in the units of this layer, which can differ from the
+        units in the viewer. See `_data_to_viewer_scale` and `data_to_world`.
         """
         res = self._transforms[1:3].simplified
         res.units = self.units
         return res
+
+    @property
+    def _layer_to_viewer_units(self) -> npt.NDArray:
+        """Conversion from the layer units to viewer units, for each axis.
+
+        World coordinates in the viewer use units shared by all layers, which
+        can differ from the units of this layer. `_data_to_world` stops at this
+        layer's own units, so this is the remaining step. It is all ones if the
+        layer is not in a viewer, or the layers have inconsistent units.
+        """
+        viewer_units = self._slicing_state._units
+        if viewer_units is None or len(viewer_units) < self.ndim:
+            return np.ones(self.ndim)
+        reg = pint.get_application_registry()
+        return np.array(
+            [
+                reg.get_base_units(layer_unit)[0]
+                / reg.get_base_units(viewer_unit)[0]
+                for layer_unit, viewer_unit in zip(
+                    self.units, viewer_units[-self.ndim :], strict=True
+                )
+            ]
+        )
+
+    @property
+    def _data_to_viewer_scale(self) -> npt.NDArray:
+        """Size of one data pixel in viewer world coordinates, for each axis.
+
+        This accounts for the layer scale, the affine and unit conversion, and
+        is always positive. Use this rather than `Layer.scale` to relate data
+        coordinates to the screen, for example with `Layer.scale_factor`.
+        """
+        return np.abs(self._data_to_world.scale) * self._layer_to_viewer_units
+
+    def _viewer_to_layer_units(self, position: npt.ArrayLike) -> npt.NDArray:
+        """Convert a world position from viewer units to this layer's units."""
+        position = np.array(position, dtype=float)
+        n_axes = min(len(position), self.ndim)
+        position[-n_axes:] /= self._layer_to_viewer_units[-n_axes:]
+        return position
 
     def _world_to_data_ray(self, vector: npt.ArrayLike) -> npt.NDArray:
         """Convert a vector defining an orientation from world coordinates to data coordinates.
@@ -2175,7 +2225,10 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
         data_corners = (
             self._transforms[1:]
             .simplified.set_slice(displayed_axes)
-            .inverse(all_corners)
+            .inverse(
+                np.array(all_corners)
+                / self._layer_to_viewer_units[displayed_axes]
+            )
         )
 
         # find the maximal data-axis-aligned bounding box containing all four
@@ -2302,8 +2355,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
         if position is not None:
             # We need to display the position in world coordinates with a
             # specific precision. Here is how it is computed:
-            # - scale comes from the whole data to world transform, so that it
-            #   includes any affine. It can be negative, so we take the abs
+            # - scale comes from the whole data to viewer transform, so that it
+            #   includes any affine and unit conversion.
             # - then, you take the -log10. For example, if the scale is 0.01,
             #   you need 2 decimal places of precision to display the
             #   coordinates so that you get at least 1 distinct coordinate
@@ -2321,7 +2374,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
             # - we take a max because we don't want to go below 0 precision.
             # - we convert to int because it needs to be int to be used in a
             #   format string.
-            scale = np.abs(self._data_to_world.scale)
+            scale = self._data_to_viewer_scale
             precision = int(max(np.max(np.ceil(-np.log10(scale))), -2) + 2)
             position = np.asarray(position)
             value = self.get_value(

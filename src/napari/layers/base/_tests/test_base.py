@@ -342,3 +342,61 @@ def test_status_coordinates_account_for_affine():
     assert coords(affine=np.diag([0.01, 0.01, 1])) == coords(
         scale=(0.01, 0.01)
     )
+
+
+def _add_mm_layer_to_um_viewer(data=None, **kwargs):
+    from napari.components import ViewerModel
+
+    viewer = ViewerModel()
+    viewer.add_image(np.zeros((1000, 1000)), units=('um', 'um'))
+    if data is None:
+        data = np.arange(100.0).reshape(10, 10)
+    return viewer.add_image(data, units=('mm', 'mm'), **kwargs)
+
+
+def test_world_coordinates_use_viewer_units():
+    layer = _add_mm_layer_to_um_viewer()
+
+    npt.assert_allclose(layer.data_to_world((1, 2)), (1000, 2000))
+    npt.assert_allclose(layer.world_to_data((1000, 2000)), (1, 2))
+    assert layer.get_value((1000, 2000), world=True) == layer.data[1, 2]
+
+
+def test_data_to_viewer_scale():
+    layer = _add_mm_layer_to_um_viewer(
+        scale=(-2, 2), affine=np.diag([0.5, 0.25, 1])
+    )
+
+    npt.assert_allclose(layer._data_to_viewer_scale, (1000, 500))
+
+
+def test_corner_pixels_use_viewer_units():
+    layer = _add_mm_layer_to_um_viewer(
+        data=[np.zeros((1000, 1000)), np.zeros((500, 500))], multiscale=True
+    )
+
+    layer._update_draw(
+        scale_factor=1,
+        corner_pixels_displayed=np.array([[0, 0], [5000, 5000]]),
+        shape_threshold=(800, 600),
+    )
+
+    assert np.all(layer.corner_pixels[1] <= 6)
+
+
+def test_transform_box_handle_uses_viewer_units():
+    from napari.layers.base._base_mouse_bindings import highlight_box_handles
+    from napari.layers.utils.interaction_box import InteractionBoxHandle
+    from napari.utils._test_utils import read_only_mouse_event
+
+    layer = _add_mm_layer_to_um_viewer()
+    event = read_only_mouse_event(
+        type='mouse_move', position=(-500, -500), dims_displayed=[0, 1]
+    )
+
+    highlight_box_handles(layer, event)
+
+    assert (
+        layer._overlays['transform_box'].selected_handle
+        == InteractionBoxHandle.TOP_LEFT
+    )
