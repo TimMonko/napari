@@ -188,3 +188,24 @@ def test_highlight_with_rescale_projection():
 
     # Previously, raised ValueError: could not broadcast input array from shape (5,) into shape (1,)
     vispy_layer._on_highlight_change()
+
+
+@pytest.mark.parametrize(
+    'transforms',
+    [{'scale': (0.5, 0.5)}, {'affine': np.diag([0.5, 0.5, 1])}],
+)
+def test_marker_size_accounts_for_transform(transforms):
+    """Rendered size must not depend on where the transform scale is held."""
+    layer = Points([[0, 0]], size=10, **transforms)
+    vispy_layer = VispyPointsLayer(layer, font_info=FontInfo())
+
+    assert vispy_layer.node.points_markers._data['a_size'][0] == 5
+
+
+def test_marker_size_updates_on_affine_change():
+    layer = Points([[0, 0]], size=10)
+    vispy_layer = VispyPointsLayer(layer, font_info=FontInfo())
+
+    layer.affine = np.diag([0.5, 0.5, 1])
+
+    assert vispy_layer.node.points_markers._data['a_size'][0] == 5

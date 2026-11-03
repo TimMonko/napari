@@ -2730,3 +2730,19 @@ def test_points_layer_display_correct_slice_on_scale(viewer_model):
     request = pts._slicing_state._make_slice_request(viewer_model.dims)
     response = request()
     np.testing.assert_equal(response.indices, [0])
+
+
+@pytest.mark.parametrize(
+    'transforms',
+    [{'scale': (0.25, 0.5)}, {'affine': np.diag([0.25, 0.5, 1])}],
+)
+def test_value_with_anisotropic_transform(transforms):
+    """Hit area is isotropic in world and sized by the last axis scale."""
+    layer = Points([[100, 100]], size=100, **transforms)
+    center = np.array(layer.data_to_world((100, 100)))
+
+    # the radius is size / 2 * last axis scale = 25 world units along each axis
+    assert layer.get_value(center + [20, 0], world=True) == 0
+    assert layer.get_value(center + [0, 20], world=True) == 0
+    assert layer.get_value(center + [30, 0], world=True) is None
+    assert layer.get_value(center + [0, 30], world=True) is None
