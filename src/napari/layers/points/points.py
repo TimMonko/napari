@@ -1700,9 +1700,9 @@ class Points(Layer):
             ]
             # positions are scaled anisotropically by scale, but sizes are not,
             # so we need to calculate the ratio to correctly map to screen coordinates
-            scale = np.abs(self._data_to_world.scale)
             scale_ratio = (
-                scale[self._slice_input.displayed] / self._size_to_viewer_scale
+                self._data_to_viewer_scale[self._slice_input.displayed]
+                / self._size_to_viewer_scale
             )
             # Get the point sizes
             # TODO: calculate distance in canvas space to account for canvas_size_limits.
@@ -1729,8 +1729,7 @@ class Points(Layer):
         It is the last displayed axis, because the scale of a hidden axis does
         not affect what is on screen.
         """
-        last_displayed = self._slice_input.displayed[-1]
-        return abs(self._data_to_world.scale[last_displayed])
+        return self._data_to_viewer_scale[self._slice_input.displayed[-1]]
 
     def _get_value_3d(
         self,
@@ -1778,9 +1777,9 @@ class Points(Layer):
 
         # positions are scaled anisotropically by scale, but sizes are not,
         # so we need to calculate the ratio to correctly map to screen coordinates
-        scale = np.abs(self._data_to_world.scale)
         scale_ratio = (
-            scale[self._slice_input.displayed] / self._size_to_viewer_scale
+            self._data_to_viewer_scale[self._slice_input.displayed]
+            / self._size_to_viewer_scale
         )
         # find the points the click intersects
         sizes = np.expand_dims(self._view_size, axis=1) / scale_ratio / 2
