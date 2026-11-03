@@ -1519,8 +1519,9 @@ class Labels(ScalarFieldBase):
                 Maximum (exclusive) indices for each painted dimension.
             Returns None if the brush operation is invalid.
         """
+        data_to_world_scale = self._data_to_world.scale
         paint_scale = np.array(
-            [self.scale[i] for i in dims_to_paint], dtype=float
+            [data_to_world_scale[i] for i in dims_to_paint], dtype=float
         )
 
         if self.n_edit_dimensions < self.ndim:

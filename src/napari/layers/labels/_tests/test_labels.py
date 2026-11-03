@@ -2830,3 +2830,17 @@ def test_negative_coord_meaning_follows_axis_role_via_n_edit_dims():
     brush.paint(coord, 1)
     assert np.any(brush.data[0])  # -1 clipped to the near edge
     assert not np.any(brush.data[-1])
+
+
+def test_paint_brush_accounts_for_affine():
+    """The brush must be the same shape in world for scale and affine."""
+
+    def paint(**transforms):
+        layer = Labels(np.zeros((101, 101), dtype=np.uint8), **transforms)
+        layer.brush_size = 21
+        layer.paint((50, 50), 1, refresh=False)
+        return layer.data
+
+    np.testing.assert_array_equal(
+        paint(affine=np.diag([1, 4, 1])), paint(scale=(1, 4))
+    )
