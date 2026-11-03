@@ -2246,7 +2246,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
         return source_str
 
     def _use_integer_coords_in_status(self) -> bool:
-        """If scale, translation, and units are default, use int coords.
+        """If the data to world transform and units are default, use int coords.
 
         This matches the legacy behavior of the viewer status bar and is
         probably close to what users want, especially for images, in the case
@@ -2254,9 +2254,10 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
 
         See https://github.com/napari/napari/pull/9287 for further discussion.
         """
+        data_to_world = self._data_to_world
         return bool(
-            np.all(np.asarray(self.scale) == 1)
-            and np.all(np.asarray(self.translate) == 0)
+            np.array_equal(data_to_world.linear_matrix, np.eye(self.ndim))
+            and np.all(data_to_world.translate == 0)
             and all(
                 unit == pint.get_application_registry().pixel
                 for unit in self.units
@@ -2301,7 +2302,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
         if position is not None:
             # We need to display the position in world coordinates with a
             # specific precision. Here is how it is computed:
-            # - scale can be negative, so we take the abs
+            # - scale comes from the whole data to world transform, so that it
+            #   includes any affine. It can be negative, so we take the abs
             # - then, you take the -log10. For example, if the scale is 0.01,
             #   you need 2 decimal places of precision to display the
             #   coordinates so that you get at least 1 distinct coordinate
@@ -2319,9 +2321,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC, metaclass=PostInit):
             # - we take a max because we don't want to go below 0 precision.
             # - we convert to int because it needs to be int to be used in a
             #   format string.
-            precision = int(
-                max(np.max(np.ceil(-np.log10(np.abs(self.scale)))), -2) + 2
-            )
+            scale = np.abs(self._data_to_world.scale)
+            precision = int(max(np.max(np.ceil(-np.log10(scale))), -2) + 2)
             position = np.asarray(position)
             value = self.get_value(
                 position,
