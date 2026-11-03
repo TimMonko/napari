@@ -2844,3 +2844,17 @@ def test_paint_brush_accounts_for_affine():
     np.testing.assert_array_equal(
         paint(affine=np.diag([1, 4, 1])), paint(scale=(1, 4))
     )
+
+
+def test_cursor_size_uses_viewer_units():
+    from napari.components import ViewerModel
+
+    viewer = ViewerModel()
+    viewer.add_image(np.zeros((1000, 1000)), units=('um', 'um'))
+    layer = viewer.add_labels(
+        np.zeros((10, 10), dtype=np.uint8), units=('mm', 'mm')
+    )
+
+    layer.brush_size = 2
+
+    assert layer.cursor_size == pytest.approx(2000)
