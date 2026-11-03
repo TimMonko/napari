@@ -219,3 +219,12 @@ def test_marker_size_ignores_scale_on_non_displayed_axis():
     vispy_layer = VispyPointsLayer(layer, font_info=FontInfo())
 
     assert vispy_layer.node.points_markers._data['a_size'][0] == 10
+
+
+def test_marker_size_uses_viewer_units():
+    viewer = ViewerModel()
+    viewer.add_image(np.zeros((1000, 1000)), units=('um', 'um'))
+    layer = viewer.add_points([[0, 0]], size=10, units=('mm', 'mm'))
+    vispy_layer = VispyPointsLayer(layer, font_info=FontInfo())
+
+    assert vispy_layer.node.points_markers._data['a_size'][0] == 10000

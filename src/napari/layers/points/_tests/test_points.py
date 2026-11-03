@@ -2758,3 +2758,13 @@ def test_value_with_scale_on_non_displayed_axis():
 
     assert layer.get_value((4, 0, 500), world=True) == 0
     assert layer.get_value((6, 0, 500), world=True) is None
+
+
+def test_value_with_viewer_units():
+    """The hit area must follow the point when converted to viewer units."""
+    viewer = ViewerModel()
+    viewer.add_image(np.zeros((1000, 1000)), units=('um', 'um'))
+    layer = viewer.add_points([[0, 0]], size=10, units=('mm', 'mm'))
+
+    assert layer.get_value((4000, 0), world=True) == 0
+    assert layer.get_value((6000, 0), world=True) is None
