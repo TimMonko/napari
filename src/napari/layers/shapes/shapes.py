@@ -2406,16 +2406,11 @@ class Shapes(Layer):
 
         This is often needed when calculating screen-space sizes and distances
         of vertices for interactivity (rescaling, adding vertices, etc).
-        The scale comes from the full data to world transform, so that it
-        includes both the layer scale and any scale in the affine. We use the
-        last displayed axis, because the scale of a hidden axis does not affect
-        what is on screen, and only its magnitude, because sizes and distances
-        must remain positive.
+        We use the last displayed axis, because the scale of a hidden axis does
+        not affect what is on screen.
         """
         last_displayed = self._slice_input.displayed[-1]
-        return self.scale_factor / abs(
-            self._data_to_world.scale[last_displayed]
-        )
+        return self.scale_factor / self._data_to_viewer_scale[last_displayed]
 
     @property
     def _normalized_vertex_radius(self):
@@ -2429,8 +2424,9 @@ class Shapes(Layer):
         Vertices have the same size on screen along every axis, but the data
         to world scale can differ between axes.
         """
-        displayed = self._slice_input.displayed
-        displayed_scale = np.abs(self._data_to_world.scale[displayed])
+        displayed_scale = self._data_to_viewer_scale[
+            self._slice_input.displayed
+        ]
         return self._vertex_size * self.scale_factor / 2 / displayed_scale
 
     def _set_view_slice(self):
