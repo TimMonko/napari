@@ -17,8 +17,10 @@ from napari.utils.events.event import (
     EmitterGroup,
     Event,
     EventEmitter,
+    RenamedWarningEmitter,
     WarningEmitter,
 )
+from napari.utils.migrations import RenamedProperty
 from napari.utils.misc import pick_equality_operator
 
 # encoders for non-napari specific field types.  To declare a custom encoder
@@ -174,6 +176,9 @@ def _get_field_dependents(cls: 'EventedModel') -> dict[str, set[str]]:
         # if dependencies haven't been explicitly defined, we can glean
         # them from the property.fget code object:
         for prop_name, prop in cls.__properties__.items():
+            if isinstance(prop, RenamedProperty):
+                # aliases forward their target's event instead
+                continue
             _update_dependents_from_property_code(cls, prop_name, prop, deps)
     return deps
 
@@ -332,6 +337,11 @@ class EventedModel(BaseModel, metaclass=EventedMetaclass):
     def _setattr_impl(self, name: str, value: Any) -> None:
         if name not in getattr(self, 'events', {}):
             # fallback to default behavior
+            self._super_setattr_(name, value)
+            return
+        if isinstance(self.__properties__.get(name), RenamedProperty):
+            # the alias writes to its target, whose event the alias's
+            # emitter forwards; comparing here would emit a second time
             self._super_setattr_(name, value)
             return
 
@@ -537,9 +547,17 @@ class ComparisonDelayer:
 def _property_event_emitter(name: str, prop: property) -> EventEmitter:
     """Return the event emitter for a property.
 
-    A property whose getter is decorated with ``@deprecated`` gets an
-    emitter that warns with the same message when a callback connects.
+    Deprecated properties get an emitter that warns when a callback
+    connects: a ``RenamedProperty`` forwards the event of its target, and
+    a getter decorated with ``@deprecated`` reuses its message.
     """
+    if isinstance(prop, RenamedProperty):
+        return RenamedWarningEmitter(
+            message=prop.event_message,
+            category=prop.category,
+            new_path=prop.new_name,
+            type_name=name,
+        )
     message = getattr(prop.fget, '__deprecated__', None)
     if message is not None:
         return WarningEmitter(

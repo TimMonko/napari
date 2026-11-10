@@ -17,6 +17,7 @@ from typing_extensions import deprecated
 from napari._pydantic_util import NapariConfigDict
 from napari.utils.events import EmitterGroup, EventedModel
 from napari.utils.events.custom_types import Array
+from napari.utils.migrations import RenamedProperty
 from napari.utils.misc import StringEnum
 
 if TYPE_CHECKING:
@@ -968,3 +969,96 @@ def test_deprecated_without_category_with_additional_decorator():
 
     with pytest.warns(DeprecationWarning, match='deprecation text'):
         model.events.b.connect(lambda x: None)
+
+
+def test_renamed_property():
+    class Base(EventedModel):
+        a: int = 1
+        b = RenamedProperty(
+            new_name='a',
+            since_version='0.1.0',
+            due_date='fall 2027',
+        )
+
+    s = Base()
+
+    with pytest.warns(FutureWarning, match='Base.b is deprecated since 0.1.0'):
+        assert s.b == 1
+
+    mock = Mock()
+    with pytest.warns(
+        FutureWarning,
+        match='Base.events.b is deprecated since 0.1.0.*Please use .*Base.events.a instead',
+    ):
+        s.events.b.connect(mock)
+
+    s.a = 2
+    mock.assert_called_once()
+
+
+def test_renamed_property_assignment_emits_once():
+    """Assigning through an alias should only emit the forwarded target event."""
+
+    class Model(EventedModel):
+        value: int = 1
+        old_value = RenamedProperty(new_name='value', since_version='0.1.0')
+
+    model = Model()
+    alias_callback = Mock()
+    target_callback = Mock()
+    with pytest.warns(FutureWarning, match='events.old_value is deprecated'):
+        model.events.old_value.connect(alias_callback)
+    model.events.value.connect(target_callback)
+
+    with pytest.warns(FutureWarning, match='Model.old_value is deprecated'):
+        model.old_value = 2
+
+    assert model.value == 2
+    target_callback.assert_called_once()
+    alias_callback.assert_called_once()
+    assert alias_callback.call_args.args[0].value == 2
+
+
+def test_renamed_property_nested():
+    class Sub(EventedModel):
+        a: int = 2
+
+    class Base(EventedModel):
+        s: Sub = Field(default_factory=Sub)
+        a = RenamedProperty(
+            new_name='s.a',
+            since_version='0.1.0',
+            due_date='fall 2027',
+        )
+
+    s = Base()
+
+    with pytest.warns(FutureWarning, match='Base.a is deprecated since 0.1.0'):
+        assert s.a == 2
+
+    mock = Mock()
+
+    with pytest.warns(
+        FutureWarning,
+        match='Base.events.a is deprecated since 0.1.0.*Please use .*Base.s.events.a instead',
+    ):
+        s.events.a.connect(mock)
+
+    s.s.a = 3
+
+    mock.assert_called_once()
+    mock2 = Mock()
+    s.s.events.a.connect(mock2)
+    with pytest.warns(
+        FutureWarning,
+        match='Base.a is deprecated since 0.1.0.*Please use .*s.a instead',
+    ):
+        s.a = 1
+
+    mock2.assert_called_once()
+
+    assert s.s.a == 1
+
+    # replacing the intermediate model reconnects the alias
+    s.s = Sub(a=5)
+    assert mock.call_count == 3
