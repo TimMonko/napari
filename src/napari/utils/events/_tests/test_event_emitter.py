@@ -882,3 +882,41 @@ def test_dependent_warning_emitter():
     assert mock.call_count == 4
     b.events.aa.disconnect(mock)
     assert not b.a.events.a.callbacks
+
+
+def test_renamed_emitter_stable_segments_do_not_warn():
+    """Frozen fields and mapping keys on the path need no replacement event."""
+    import warnings
+
+    from pydantic import Field
+
+    from napari.utils.events import EventedDictNamespace, EventedModel
+
+    class Leaf(EventedModel):
+        value: int = 1
+
+    class Middle(EventedModel):
+        items: EventedDictNamespace = Field(
+            default_factory=lambda: EventedDictNamespace({'leaf': Leaf()}),
+            frozen=True,
+        )
+
+    class Root(EventedModel):
+        middle: Middle = Field(default_factory=Middle, frozen=True)
+
+    root = Root()
+    alias = RenamedWarningEmitter(
+        source=root,
+        type_name='old_value',
+        new_path='middle.items.leaf.value',
+        message='renamed',
+    )
+    callback = Mock()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', UserWarning)
+        with pytest.warns(FutureWarning, match='renamed'):
+            alias.connect(callback)
+
+    root.middle.items.leaf.value = 2
+    callback.assert_called_once()

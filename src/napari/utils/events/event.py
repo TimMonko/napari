@@ -53,7 +53,13 @@ import inspect
 import os
 import warnings
 import weakref
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import (
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from functools import partial
 from typing import (
     TYPE_CHECKING,
@@ -874,6 +880,23 @@ class WarningEmitter(EventEmitter):
         self._should_warn = False
 
 
+def _is_stable_path_segment(target: object, attr: str) -> bool:
+    """Return True if a path segment without an event needs no warning.
+
+    Read-only properties and frozen pydantic fields cannot be replaced.
+    Mapping keys (such as ``EventedDictNamespace`` entries) have no per-key
+    event and are treated as stable; replacing such an entry requires an
+    explicit ``_reconnect_emitter()`` call.
+    """
+    descriptor = inspect.getattr_static(type(target), attr, None)
+    if isinstance(descriptor, property):
+        return descriptor.fset is None
+    field = getattr(type(target), 'model_fields', {}).get(attr)
+    if field is not None:
+        return bool(field.frozen)
+    return isinstance(target, Mapping) and attr in target
+
+
 class ChildrenEmitterMixin:
     """Mixin to provide the implementation for reemitting events based on child objects.
 
@@ -971,16 +994,10 @@ class ChildrenEmitterMixin:
                 emitter.connect(self._on_parent_replaced)
                 self._replacement_emitters.append(weakref.ref(emitter))
             else:
-                # it might happen that some attribute/property on path is forzen/non-settable
-                # then it will not have adjacent event, but also, as cannot be changed
-                # this is not a problem.
-                # but if there is no event emitter but the attribute is settable,
-                # then we should warn the user that the event emitter is not available.
-                descriptor = inspect.getattr_static(type(target), attr, None)
-                if not (
-                    isinstance(descriptor, property)
-                    and descriptor.fset is None
-                ):
+                # A segment without an event is fine if it cannot be replaced
+                # (read-only property, frozen field, mapping key). Otherwise
+                # warn, since replacing it would leave a stale connection.
+                if not _is_stable_path_segment(target, attr):
                     # this is when we found a settable attribute but no event emitter,
                     # the if might not catch all cases.
                     warnings.warn(
