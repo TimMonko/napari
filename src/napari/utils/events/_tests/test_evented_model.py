@@ -1,6 +1,7 @@
 import inspect
 import operator
 from enum import auto
+from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 from unittest.mock import Mock
 
@@ -11,6 +12,7 @@ from dask import delayed
 from dask.delayed import Delayed
 from pydantic import Field, GetCoreSchemaHandler, ValidationError
 from pydantic_core import core_schema
+from typing_extensions import deprecated
 
 from napari._pydantic_util import NapariConfigDict
 from napari.utils.events import EmitterGroup, EventedModel
@@ -834,3 +836,135 @@ def test_events_called():
     s.a = 2
 
     e_m.assert_called_once()
+
+
+def test_property_deprecation():
+    class SampleClass(EventedModel):
+        a: int = 1
+
+        @property
+        @deprecated('deprecation text', category=FutureWarning)
+        def b(self):
+            return self.a * 2
+
+        @b.setter
+        @deprecated('deprecation text', category=FutureWarning)
+        def b(self, value):
+            self.a = value // 2
+
+    s = SampleClass()
+
+    with pytest.warns(FutureWarning, match='deprecation text'):
+        s.b = 4
+
+    assert s.a == 2
+
+    with pytest.warns(FutureWarning, match='deprecation text'):
+        assert s.b == 4
+
+    with pytest.warns(FutureWarning, match='deprecation text'):
+        s.events.b.connect(lambda x: None)
+
+
+def test_deprecated_property_in_subclass():
+    class Base(EventedModel):
+        a: int = 1
+
+        @property
+        @deprecated('deprecation text', category=FutureWarning)
+        def b(self):
+            return self.a * 2
+
+    class Sub(Base):
+        c: int = 3
+
+        @property
+        @deprecated('deprecation text', category=DeprecationWarning)
+        def d(self):
+            return self.c + self.b
+
+    s = Sub()
+
+    with pytest.warns(FutureWarning, match='deprecation text'):
+        assert s.b == 2
+
+    with pytest.warns(DeprecationWarning, match='deprecation text'):
+        assert s.d == 5
+
+    with pytest.warns(FutureWarning, match='deprecation text'):
+        s.events.b.connect(lambda x: None)
+
+    with pytest.warns(DeprecationWarning, match='deprecation text'):
+        s.events.d.connect(lambda x: None)
+
+
+def test_overwriting_deprecation_text_in_subclass():
+    class Base(EventedModel):
+        a: int = 1
+
+        @property
+        @deprecated('deprecation text', category=FutureWarning)
+        def b(self):  # pragma: no cover
+            return self.a * 2
+
+    class Sub(Base):
+        @property
+        @deprecated('new deprecation text', category=DeprecationWarning)
+        def b(self):
+            return self.a * 3
+
+    s = Sub()
+
+    with pytest.warns(DeprecationWarning, match='new deprecation text'):
+        assert s.b == 3
+
+    with pytest.warns(DeprecationWarning, match='new deprecation text'):
+        s.events.b.connect(lambda x: None)
+
+
+def test_deprecated_property_without_category():
+    """Without a runtime category, connecting warns as a soft deprecation."""
+
+    class Model(EventedModel):
+        a: int = 1
+
+        @property
+        @deprecated('deprecation text', category=None)
+        def b(self):
+            return self.a * 2
+
+    model = Model()
+
+    assert model.b == 2
+
+    mock = Mock()
+    with pytest.warns(DeprecationWarning, match='deprecation text'):
+        model.events.b.connect(mock)
+
+    model.a = 3
+    mock.assert_called_once()
+
+
+def test_deprecated_without_category_with_additional_decorator():
+    def decorator(func):
+        @wraps(func)
+        def wrapper(arg):
+            return func(arg)
+
+        return wrapper
+
+    class Model(EventedModel):
+        a: int = 1
+
+        @property
+        @deprecated('deprecation text', category=None)
+        @decorator
+        def b(self):
+            return self.a * 2
+
+    model = Model()
+
+    assert model.b == 2
+
+    with pytest.warns(DeprecationWarning, match='deprecation text'):
+        model.events.b.connect(lambda x: None)

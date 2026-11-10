@@ -13,7 +13,12 @@ from pydantic import (
 from pydantic._internal._model_construction import ModelMetaclass
 
 from napari._pydantic_util import get_inner_type, get_outer_type
-from napari.utils.events.event import EmitterGroup, Event
+from napari.utils.events.event import (
+    EmitterGroup,
+    Event,
+    EventEmitter,
+    WarningEmitter,
+)
 from napari.utils.misc import pick_equality_operator
 
 # encoders for non-napari specific field types.  To declare a custom encoder
@@ -224,7 +229,12 @@ class EventedModel(BaseModel, metaclass=EventedMetaclass):
         ]
 
         self._events.add(
-            **dict.fromkeys(field_events + list(self.__properties__))
+            auto_connect=None,  # explicit so emitters cannot bind to it
+            **dict.fromkeys(field_events),
+            **{
+                name: _property_event_emitter(name, prop)
+                for name, prop in self.__properties__.items()
+            },
         )
 
         # while seemingly redundant, this next line is very important to maintain
@@ -522,3 +532,40 @@ class ComparisonDelayer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._target._delay_check_semaphore -= 1
         self._target._check_if_values_changed_and_emit_if_needed()
+
+
+def _property_event_emitter(name: str, prop: property) -> EventEmitter:
+    """Return the event emitter for a property.
+
+    A property whose getter is decorated with ``@deprecated`` gets an
+    emitter that warns with the same message when a callback connects.
+    """
+    message = getattr(prop.fget, '__deprecated__', None)
+    if message is not None:
+        return WarningEmitter(
+            message=message,
+            category=_deprecation_category(prop.fget),
+            type_name=name,
+        )
+    return EventEmitter(type_name=name)
+
+
+def _deprecation_category(func: object) -> type[Warning]:
+    """Return the warning category passed to ``@deprecated`` for ``func``.
+
+    PEP 702 only records the message on the decorated function, so the
+    category is read from the wrapper's closure. When it cannot be found
+    (e.g. ``category=None``, or another decorator wrapping the getter),
+    fall back to the PEP 702 default, ``DeprecationWarning``, which marks
+    a soft deprecation.
+    """
+    code = getattr(func, '__code__', None)
+    closure = getattr(func, '__closure__', None)
+    if code is not None and closure:
+        for name, cell in zip(code.co_freevars, closure, strict=True):
+            if name != 'category':
+                continue
+            category = cell.cell_contents
+            if isinstance(category, type) and issubclass(category, Warning):
+                return category
+    return DeprecationWarning

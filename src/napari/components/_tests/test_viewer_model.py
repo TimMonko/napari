@@ -1391,3 +1391,16 @@ def test_dims_axis_labels_default_when_all_layers_default():
 
     layer0.axis_labels = ['-4', '-3', '-2', '-1']
     assert viewer.dims.axis_labels == ('-4', '-3', '-2', '-1')  # all default
+
+
+@pytest.mark.parametrize(
+    'name',
+    ['camera', 'axes', 'floating_axes', 'scale_bar', 'text_overlay', 'grid'],
+)
+def test_deprecated_property_events_warn_on_connect(name):
+    """Connecting to a deprecated property's event warns like the getter."""
+    viewer = ViewerModel()
+    with pytest.warns(
+        DeprecationWarning, match=f'viewer.{name} is a deprecated'
+    ):
+        getattr(viewer.events, name).connect(lambda e: None)
