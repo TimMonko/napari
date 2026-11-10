@@ -12,16 +12,21 @@ from functools import wraps
 from typing import (
     TYPE_CHECKING,
     Any,
+    Generic,
     LiteralString,
     NamedTuple,
     Self,
     overload,
 )
 
+from typing_extensions import TypeVar
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 _UNSET = object()
+
+_T = TypeVar('_T', default=Any)
 
 #: The canonical sentence. ``removal`` and ``replacement`` are themselves
 #: filled in from the constants below so that the two states stay symmetrical.
@@ -185,7 +190,7 @@ def _window_from_due_date(
     return due_date
 
 
-class RenamedProperty(property):
+class RenamedProperty(property, Generic[_T]):
     """A deprecated alias that forwards access to a renamed or moved attribute.
 
     Reading or writing the alias emits a warning and accesses the target
@@ -228,11 +233,17 @@ class RenamedProperty(property):
     explicitly. Define custom accessors on the target property; the inherited
     ``getter``, ``setter``, and ``deleter`` helpers are not supported.
 
+    The alias is generic in the type of its target. Subscript it to keep
+    static type information for code that still uses the old name; an
+    unsubscripted alias is typed as ``Any``.
+
     Examples
     --------
     >>> class Settings:
     ...     size = 10
-    ...     old_size = RenamedProperty(new_name='size', since_version='0.7.0')
+    ...     old_size = RenamedProperty[int](
+    ...         new_name='size', since_version='0.7.0'
+    ...     )
     """
 
     def __init__(
@@ -272,6 +283,22 @@ class RenamedProperty(property):
             fset=self._set_value if writable else None,
             doc=doc,
         )
+
+    if TYPE_CHECKING:
+        # Typing-only overloads; at runtime ``property.__get__``/``__set__``
+        # are used unchanged.
+        @overload
+        def __get__(
+            self, instance: None, owner: type | None = None, /
+        ) -> Self: ...
+        @overload
+        def __get__(
+            self, instance: object, owner: type | None = None, /
+        ) -> _T: ...
+        def __get__(
+            self, instance: object | None, owner: type | None = None, /
+        ) -> Self | _T: ...
+        def __set__(self, instance: object, value: _T, /) -> None: ...
 
     def __set_name__(self, owner: type, name: str) -> None:
         """Record the owning class and alias name for warning messages."""

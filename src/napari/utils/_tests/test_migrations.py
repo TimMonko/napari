@@ -527,3 +527,25 @@ def test_add_deprecated_property_due_date_alias():
         )(Sample)
     assert recorded[0].filename == __file__
     assert Sample.old.category is FutureWarning
+
+
+def test_renamed_property_subscripted():
+    """A subscripted alias behaves like an unsubscripted one at runtime."""
+
+    class Settings:
+        size = 10
+        old_size = RenamedProperty[int](new_name='size', since_version='0.7.0')
+
+    assert isinstance(Settings.old_size, RenamedProperty)
+    assert Settings.old_size.name == 'old_size'
+
+    settings = Settings()
+    with pytest.warns(
+        DeprecationWarning, match='Settings.old_size is deprecated'
+    ):
+        assert settings.old_size == 10
+    with pytest.warns(
+        DeprecationWarning, match='Settings.old_size is deprecated'
+    ):
+        settings.old_size = 3
+    assert settings.size == 3
