@@ -162,6 +162,29 @@ def _warning_category_for(window: str | None) -> type[Warning]:
     return FutureWarning if window else DeprecationWarning
 
 
+def _window_from_due_date(
+    window: str | None,
+    due_date: str | None,
+    *,
+    owner: str,
+    stacklevel: int,
+) -> str | None:
+    """Accept the pre-0.11 ``due_date`` argument as an alias of ``window``."""
+    if due_date is None:
+        return window
+    if window is not None:
+        raise ValueError(
+            f'{owner} got both window and due_date; pass only window.'
+        )
+    deprecation_warning(
+        name=f"{owner}'s due_date argument",
+        replacement='window',
+        since='0.11.0',
+        stacklevel=stacklevel + 1,
+    )
+    return due_date
+
+
 class RenamedProperty(property):
     """A deprecated alias that forwards access to a renamed or moved attribute.
 
@@ -176,11 +199,16 @@ class RenamedProperty(property):
     since_version : str
         Version in which the alias was deprecated. An empty string omits the
         version from warning messages.
+    window : str, optional
+        Removal window as a ``YYYY-QN`` token, meaning the alias may be
+        removed as early as that quarter. Omit it for a soft deprecation.
+        This does not automatically disable access.
     due_date : str, optional
-        Announced removal date or season, such as ``spring 2027``. If omitted,
-        no removal date is announced. This does not automatically disable access.
+        Deprecated alias for ``window``.
     category : type of Warning, optional
-        Warning category used for access and assignment. Defaults to FutureWarning.
+        Warning category used for access and assignment. Defaults to
+        ``FutureWarning`` with a ``window`` and ``DeprecationWarning``
+        without one.
     writable : bool, optional
         Whether assignment through the alias is allowed. Defaults to True.
         The target must also support assignment.
@@ -212,19 +240,23 @@ class RenamedProperty(property):
         *,
         new_name: str,
         since_version: str,
+        window: str | None = None,
         due_date: str | None = None,
-        category: type[Warning] = FutureWarning,
+        category: type[Warning] | None = None,
         writable: bool = True,
         doc: str | None = None,
     ) -> None:
+        window = _window_from_due_date(
+            window, due_date, owner='RenamedProperty', stacklevel=2
+        )
         parts = new_name.split('.')
         if any(not part.isidentifier() for part in parts):  # pragma: no cover
             raise ValueError(f'Invalid attribute path: {new_name!r}')
 
         self._new_name = new_name
         self._since_version = since_version
-        self._due_date = due_date
-        self._category = category
+        self._window = window
+        self._category = category or _warning_category_for(window)
         self._owner_name: str | None = None
         self._name: str | None = None
         self._parent_path = tuple(parts[:-1])
@@ -273,15 +305,11 @@ class RenamedProperty(property):
             if self._name is not None
             else 'This property'
         )
-        since = f' since {self._since_version}' if self._since_version else ''
-        schedule = (
-            f' Removal is scheduled for {self._due_date}.'
-            if self._due_date is not None
-            else ''
-        )
-        return (
-            f'{name} is deprecated{since}.'
-            f'{schedule} Please use {self._new_name} instead.'
+        return deprecation_message(
+            name=name,
+            replacement=self._new_name,
+            since=self._since_version,
+            window=self._window,
         )
 
     @property
@@ -297,16 +325,12 @@ class RenamedProperty(property):
             if self._name is not None
             else 'This event'
         )
-        since = f' since {self._since_version}' if self._since_version else ''
-        schedule = (
-            f' Removal is scheduled for {self._due_date}.'
-            if self._due_date is not None
-            else ''
-        )
         new_name = f'{self._owner_name}.{".".join(self._parent_path + ("events", self._target_name))}'
-        return (
-            f'{name} is deprecated{since}.'
-            f'{schedule} Please use {new_name} instead.'
+        return deprecation_message(
+            name=name,
+            replacement=new_name,
+            since=self._since_version,
+            window=self._window,
         )
 
     def _get_value(self, instance: object) -> object:
@@ -458,6 +482,7 @@ def add_deprecated_property(
     new_name: str,
     version: str | None = None,
     since_version: str = '',
+    window: str | None = None,
     due_date: str | None = None,
 ) -> Callable[[type], type]:
     """
@@ -470,24 +495,34 @@ def add_deprecated_property(
     new_name : str
         Name of new property, must have its getter (and setter if applicable) implemented.
     version : str, optional
-        Deprecated and ignored. Use ``due_date`` to announce a removal date.
+        Deprecated and ignored. Use ``window`` to announce a removal window.
     since_version : str
         version when new property was added
+    window : str, optional
+        Removal window as a ``YYYY-QN`` token, meaning the property may be
+        removed as early as that quarter. Omit it for a soft deprecation.
+        This does not automatically disable access.
     due_date : str, optional
-        Announced removal date or season, such as "spring 2027". If omitted,
-        no removal date is announced. This does not automatically disable access.
+        Deprecated alias for ``window``.
 
     ..deprecated:: 0.9.2
-        `version` argument is deprecated and ignored. Use `due_date` to specify a removal date, or omit it for no announced removal date.
+        `version` argument is deprecated and ignored. Use `window` to specify a removal window, or omit it for no announced removal.
+
+    ..deprecated:: 0.11.0
+        `due_date` argument is deprecated. Use `window` instead.
     """
     if version is not None:
         warnings.warn(
             "The 'version' argument to add_deprecated_property is deprecated "
-            "and ignored. Use 'due_date' to specify a removal date, or omit "
-            'it for no announced removal date.',
+            "and ignored. Use 'window' to specify a removal window, or omit "
+            'it for no announced removal.',
             FutureWarning,
             stacklevel=3,
         )
+
+    window = _window_from_due_date(
+        window, due_date, owner='add_deprecated_property', stacklevel=3
+    )
 
     def _func(obj: type) -> type:
         if hasattr(obj, previous_name):
@@ -497,7 +532,7 @@ def add_deprecated_property(
             raise RuntimeError(f'{new_name} property must exist.')
 
         prop = RenamedProperty(
-            new_name=new_name, since_version=since_version, due_date=due_date
+            new_name=new_name, since_version=since_version, window=window
         )
         setattr(obj, previous_name, prop)
         prop.__set_name__(obj, previous_name)

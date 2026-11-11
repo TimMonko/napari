@@ -977,7 +977,7 @@ def test_renamed_property():
         b = RenamedProperty(
             new_name='a',
             since_version='0.1.0',
-            due_date='fall 2027',
+            window='2027-Q4',
         )
 
     s = Base()
@@ -1006,11 +1006,15 @@ def test_renamed_property_assignment_emits_once():
     model = Model()
     alias_callback = Mock()
     target_callback = Mock()
-    with pytest.warns(FutureWarning, match='events.old_value is deprecated'):
+    with pytest.warns(
+        DeprecationWarning, match='events.old_value is deprecated'
+    ):
         model.events.old_value.connect(alias_callback)
     model.events.value.connect(target_callback)
 
-    with pytest.warns(FutureWarning, match='Model.old_value is deprecated'):
+    with pytest.warns(
+        DeprecationWarning, match='Model.old_value is deprecated'
+    ):
         model.old_value = 2
 
     assert model.value == 2
@@ -1028,7 +1032,7 @@ def test_renamed_property_nested():
         a = RenamedProperty(
             new_name='s.a',
             since_version='0.1.0',
-            due_date='fall 2027',
+            window='2027-Q4',
         )
 
     s = Base()

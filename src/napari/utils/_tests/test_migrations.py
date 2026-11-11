@@ -40,13 +40,13 @@ def test_constructor():
         assert Sample(a=1).b == 1
 
 
-@pytest.mark.parametrize('due_date', [None, 'spring 2027'])
-def test_deprecated_property(due_date) -> None:
+@pytest.mark.parametrize('window', [None, '2027-Q2'])
+def test_deprecated_property(window) -> None:
     @add_deprecated_property(
         previous_name='old_property',
         new_name='new_property',
         since_version='0.0.0',
-        due_date=due_date,
+        window=window,
     )
     class Dummy:
         def __init__(self) -> None:
@@ -67,28 +67,37 @@ def test_deprecated_property(due_date) -> None:
     instance.new_property = 1
 
     assert isinstance(Dummy.old_property, RenamedProperty)
-    msg = 'Dummy.old_property is deprecated since 0.0.0.'
-    if due_date is not None:
-        msg += f' Removal is scheduled for {due_date}.'
-    msg += ' Please use new_property instead.'
+    removal = (
+        f' It may be removed as early as {window}.'
+        if window
+        else ' There are no current plans to remove it.'
+    )
+    category = FutureWarning if window else DeprecationWarning
+    msg = (
+        f'Dummy.old_property is deprecated since 0.0.0.{removal}'
+        ' Please use new_property instead.'
+    )
     assert Dummy.old_property.message.endswith(msg)
-    msg2 = 'Dummy.events.old_property is deprecated since 0.0.0.'
-    if due_date is not None:
-        msg2 += f' Removal is scheduled for {due_date}.'
-    msg2 += ' Please use .*events.new_property instead.'
+    assert Dummy.old_property.category is category
+    msg2 = (
+        re.escape(
+            f'Dummy.events.old_property is deprecated since 0.0.0.{removal}'
+        )
+        + ' Please use .*events.new_property instead.'
+    )
     assert re.search(msg2, Dummy.old_property.event_message)
 
-    with pytest.warns(FutureWarning, match=msg):
+    with pytest.warns(category, match=re.escape(msg)):
         assert instance.old_property == 1
 
-    with pytest.warns(FutureWarning, match=msg):
+    with pytest.warns(category, match=re.escape(msg)):
         instance.old_property = 2
 
     assert instance.new_property == 2
 
 
-@pytest.mark.parametrize('due_date', [None, 'fall 2027'])
-def test_deprecated_property_legacy_version(due_date):
+@pytest.mark.parametrize('window', [None, '2027-Q4'])
+def test_deprecated_property_legacy_version(window):
 
     with pytest.warns(
         FutureWarning, match="'version'.*deprecated.*ignored"
@@ -96,7 +105,7 @@ def test_deprecated_property_legacy_version(due_date):
         decorator = add_deprecated_property(
             previous_name='old',
             new_name='new',
-            due_date=due_date,
+            window=window,
             version='0.1.0',
             since_version='0.0.0',
         )
@@ -109,15 +118,16 @@ def test_deprecated_property_legacy_version(due_date):
     assert isinstance(Sample.old, RenamedProperty)
     assert '0.1.0' not in Sample.old.message
     assert 'since 0.0.0' in Sample.old.message
-    assert ('Removal is scheduled' in Sample.old.message) == (
-        due_date is not None
+    assert ('may be removed as early as' in Sample.old.message) == (
+        window is not None
     )
-    if due_date is not None:
-        assert due_date in Sample.old.message
+    if window is not None:
+        assert window in Sample.old.message
+    category = FutureWarning if window else DeprecationWarning
     instance = Sample()
-    with pytest.warns(FutureWarning, match='Sample.old is deprecated'):
+    with pytest.warns(category, match='Sample.old is deprecated'):
         assert instance.old == 1
-    with pytest.warns(FutureWarning, match='Sample.old is deprecated'):
+    with pytest.warns(category, match='Sample.old is deprecated'):
         instance.old = 2
     assert instance.new == 2
 
@@ -373,22 +383,25 @@ def test_deprecated_property_descriptor():
 
     instance.new_property = 1
 
-    msg = 'Sample.old_property is deprecated since 0.1.0. Please use new_property'
+    msg = (
+        'Sample.old_property is deprecated since 0.1.0. There are no current '
+        'plans to remove it. Please use new_property'
+    )
 
-    with pytest.warns(FutureWarning, match=msg):
+    with pytest.warns(DeprecationWarning, match=msg):
         assert instance.old_property == 1
 
-    with pytest.warns(FutureWarning, match=msg):
+    with pytest.warns(DeprecationWarning, match=msg):
         instance.old_property = 2
 
-    assert Sample.old_property.category is FutureWarning
+    assert Sample.old_property.category is DeprecationWarning
     assert Sample.old_property.new_name == 'new_property'
     assert re.match(
-        '.*Sample.events.old_property is deprecated since 0.1.0. Please use .*Sample.events.new_property instead.',
+        '.*Sample.events.old_property is deprecated since 0.1.0. There are no current plans to remove it. Please use .*Sample.events.new_property instead.',
         Sample.old_property.event_message,
     )
     assert re.match(
-        '.*Sample.old_property is deprecated since 0.1.0. Please use new_property instead.',
+        '.*Sample.old_property is deprecated since 0.1.0. There are no current plans to remove it. Please use new_property instead.',
         Sample.old_property.message,
     )
     assert Sample.old_property.name == 'old_property'
@@ -409,13 +422,15 @@ def test_renamed_property_accessors(writable):
     assert (prop.fset is not None) == writable
     instance = Sample()
     with pytest.warns(
-        FutureWarning, match='Sample.old is deprecated'
+        DeprecationWarning, match='Sample.old is deprecated'
     ) as recorded:
         assert prop.fget(instance) == 1
     assert recorded[0].filename == __file__
 
     if writable:
-        with pytest.warns(FutureWarning, match='Sample.old is deprecated'):
+        with pytest.warns(
+            DeprecationWarning, match='Sample.old is deprecated'
+        ):
             prop.fset(instance, 2)
         assert instance.value == 2
 
@@ -432,7 +447,7 @@ def test_deprecated_property_descriptor_nested():
         old_property = RenamedProperty(
             new_name='subsample.value',
             since_version='0.1.0',
-            due_date='fall 2027',
+            window='2027-Q4',
         )
 
     instance = Sample()
@@ -441,7 +456,7 @@ def test_deprecated_property_descriptor_nested():
 
     with pytest.warns(
         FutureWarning,
-        match='Sample.old_property is deprecated since 0.1.0. Removal is scheduled for fall 2027. Please use subsample.value instead.',
+        match='Sample.old_property is deprecated since 0.1.0. It may be removed as early as 2027-Q4. Please use subsample.value instead.',
     ):
         assert instance.old_property == 0
 
@@ -473,3 +488,42 @@ def test_deprecated_property_descriptor_no_writing():
 
     with pytest.raises(AttributeError, match='has no setter'):
         instance.new_property = 2
+
+
+def test_renamed_property_due_date_alias():
+    with pytest.warns(
+        DeprecationWarning,
+        match="RenamedProperty's due_date argument is deprecated",
+    ) as recorded:
+        prop = RenamedProperty(
+            new_name='new', since_version='0.0.0', due_date='2027-Q2'
+        )
+    assert recorded[0].filename == __file__
+    assert prop.category is FutureWarning
+    assert 'may be removed as early as 2027-Q2' in prop.message
+
+    with pytest.raises(ValueError, match='both window and due_date'):
+        RenamedProperty(
+            new_name='new',
+            since_version='0.0.0',
+            window='2027-Q2',
+            due_date='2027-Q2',
+        )
+
+
+def test_add_deprecated_property_due_date_alias():
+    class Sample:
+        new = 1
+
+    with pytest.warns(
+        DeprecationWarning,
+        match="add_deprecated_property's due_date argument is deprecated",
+    ) as recorded:
+        add_deprecated_property(
+            previous_name='old',
+            new_name='new',
+            since_version='0.0.0',
+            due_date='2027-Q2',
+        )(Sample)
+    assert recorded[0].filename == __file__
+    assert Sample.old.category is FutureWarning
