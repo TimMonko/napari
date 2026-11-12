@@ -904,6 +904,7 @@ toplevel = ["napari", "napari_builtins"]
 #   pixi run -e test-py311-pyqt6 test
 #   pixi run -e test-py312-headless test
 #   pixi run -e min-req-py311-pyqt6 test       # lowest versions of direct deps
+#   pixi run -e docs docs slimfast ../docs     # build napari/docs against this clone
 #   pixi update                                # refresh pixi.lock
 # ---------------------------------------------------------------------------
 [tool.pixi.workspace]
@@ -966,6 +967,19 @@ _strip-qt = "python -m pip uninstall -y pytest-qt qtpy"
 test = "pytest src/napari/_tests/test_examples.py -v --color=yes --import-mode=importlib"
 test-cov = "coverage run --parallel-mode -m pytest src/napari/_tests/test_examples.py -v --color=yes --import-mode=importlib"
 
+# Build the napari/docs repo against this checkout (docstrings + examples).
+#   pixi run -e docs docs [target] [path/to/docs/repo]
+[tool.pixi.feature.docs-tasks.dependencies]
+make = "*"
+
+[tool.pixi.feature.docs-tasks.tasks.docs]
+cmd = "make -C {{ docs_repo }} {{ target }} GALLERY_PATH=$PIXI_PROJECT_ROOT/examples"
+args = [
+    { arg = "target", default = "slimfast" },
+    { arg = "docs_repo", default = "../docs" },
+]
+description = "Build napari/docs (default ../docs) with this napari checkout"
+
 [tool.pixi.environments]
 default = ["py313", "pyqt6", "optional-numba", "testing", "test"]
 
@@ -992,3 +1006,6 @@ test-py312-examples = ["py312", "pyqt6", "optional-numba", "testing", "gallery",
 
 # minimum requirements (replaces tox-min-req)
 min-req-py311-pyqt6 = ["py311", "pyqt6", "optional-numba", "testing", "test", "min-req"]
+
+# napari/docs repo built against this checkout (docs dependency group)
+docs = ["py313", "pyqt6", "docs", "docs-tasks", "main-platforms"]
