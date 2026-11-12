@@ -12,7 +12,8 @@ maintenance:
       - '.pre-commit-config.yaml'
       - '.github/**/*'
       - 'resources/constraints/*'
-      - 'tox.ini'
+      - 'pixi.lock'
+      - 'tools/conda-forge/*'
       - 'pyproject.toml'
 
 # topics

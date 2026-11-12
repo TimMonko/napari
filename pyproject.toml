@@ -223,8 +223,6 @@ docs = [
 dev = [
     "prek>=0.4.0",
     "pre-commit>=2.9.0", # to keep old instructions for developers working on napari
-    "tox",
-    "tox-min-req",
     "napari[testing]",
 ]
 build = [
@@ -313,8 +311,6 @@ docs = [
 dev = [
     "prek>=0.4.0",
     "pre-commit>=2.9.0",  # to keep old instructions for developers working on napari
-    "tox",
-    "tox-min-req",
     {include-group = "testing"},
 ]
 build = [
@@ -366,7 +362,6 @@ ignore = [
   "Makefile",
   "src/napari/_version.py",  # added during build by setuptools_scm
   "tools/minreq.py",
-  "tox.ini",
   "pixi.toml",
   "pixi.lock",
   "src/napari/_qt/qt_resources/_qt_resources_*.py",

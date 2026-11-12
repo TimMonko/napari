@@ -14266,8 +14266,6 @@ packages:
   - numba!=0.62.0,!=0.62.1 ; extra == 'docs'
   - prek>=0.4.0 ; extra == 'dev'
   - pre-commit>=2.9.0 ; extra == 'dev'
-  - tox ; extra == 'dev'
-  - tox-min-req ; extra == 'dev'
   - napari[testing] ; extra == 'dev'
   - pyqt6 ; extra == 'build'
   requires_python: '>=3.11'

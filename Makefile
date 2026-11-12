@@ -1,11 +1,11 @@
 .PHONY: pre watch dist settings-schema
 
-# run the pyrefly type checker via tox
+# run the pyrefly type checker (pixi environment "typing")
 typecheck:
-	tox -e pyrefly
+	pixi run -e typing pyrefly
 
 check-manifest:
-	tox -e check-manifest
+	pixi run -e package check-manifest
 
 dist: check-manifest
 	pip install -U build

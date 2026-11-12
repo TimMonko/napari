@@ -37,7 +37,8 @@ PROJECT_NAME = 'napari'
 PIXI_TEST_FEATURE = 'test'
 TEST_GROUPS = ('testing',)
 TEST_EXTRAS = ('optional-numba',)
-# packages used in tests that are not listed in pyproject.toml (see tox.ini)
+# packages used in tests that are not listed in pyproject.toml
+# (pytest plugins the CI test command uses)
 PIXI_ONLY_TEST_PACKAGES = {'pytest-json-report', 'objgraph'}
 
 # PyPI name (canonical) -> conda-forge name (canonical)
