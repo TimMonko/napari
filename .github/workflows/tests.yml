@@ -57,7 +57,7 @@ jobs:
       fail-fast: false
       matrix:
         environment:
-          - test-py311-pyqt5
+          - test-py311-pyqt6
           - test-py314-pyqt6
           - test-py312-headless
     steps:
@@ -157,17 +157,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Mirrors test_pull_requests.yml. The canary combos (py311-pyqt5,
+        # Mirrors test_pull_requests.yml. The canary combos (py311-pyqt6,
         # py314-pyqt6, py312-headless on ubuntu-latest) run in test-initial and
         # are intentionally omitted here to avoid double-running them.
         include:
-          # base backends
-          - { environment: test-py314-pyqt5, runner: ubuntu-latest }
+          # base backends (py314-pyqt6 on ubuntu runs in test-initial)
           - { environment: test-py314-pyside6, runner: ubuntu-latest }
           # cross-OS
-          - { environment: test-py311-pyqt5, runner: windows-latest }
+          - { environment: test-py311-pyqt6, runner: windows-latest }
           - { environment: test-py314-pyqt6, runner: windows-latest }
-          - { environment: test-py314-pyqt5-nonumba, runner: macos-15-intel }
+          - { environment: test-py314-pyqt6-nonumba, runner: macos-15-intel }
           - { environment: test-py314-pyqt6, runner: macos-15 }
           - { environment: test-py314-pyqt6, runner: ubuntu-24.04-arm }
           # variants
@@ -193,7 +192,7 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
-  # Comprehensive scope: pyqt5 across all supported Pythons on Linux+Windows,
+  # Comprehensive scope: pyqt6 across all supported Pythons on Linux+Windows,
   # plus macOS/arm and the optional-dependency variants. Runs on push to main /
   # v* tags, or a manual dispatch that selects `comprehensive`.
   # ---------------------------------------------------------------------------
@@ -209,16 +208,16 @@ jobs:
       matrix:
         # Mirrors test_comprehensive.yml.
         include:
-          # pyqt5 across all supported Pythons, on Linux and Windows
-          - { environment: test-py312-pyqt5, runner: ubuntu-latest }
-          - { environment: test-py313-pyqt5, runner: ubuntu-latest }
-          - { environment: test-py314-pyqt5, runner: ubuntu-latest }
-          - { environment: test-py311-pyqt5, runner: windows-latest }
-          - { environment: test-py312-pyqt5, runner: windows-latest }
-          - { environment: test-py313-pyqt5, runner: windows-latest }
-          - { environment: test-py314-pyqt5, runner: windows-latest }
+          # pyqt6 across all supported Pythons, on Linux and Windows
+          - { environment: test-py312-pyqt6, runner: ubuntu-latest }
+          - { environment: test-py313-pyqt6, runner: ubuntu-latest }
+          - { environment: test-py314-pyqt6, runner: ubuntu-latest }
+          - { environment: test-py311-pyqt6, runner: windows-latest }
+          - { environment: test-py312-pyqt6, runner: windows-latest }
+          - { environment: test-py313-pyqt6, runner: windows-latest }
+          - { environment: test-py314-pyqt6, runner: windows-latest }
           # macOS + linux-arm
-          - { environment: test-py311-pyqt5, runner: macos-15 }
+          - { environment: test-py311-pyqt6, runner: macos-15 }
           - { environment: test-py314-pyqt6, runner: ubuntu-24.04-arm }
           # variants
           - { environment: test-py311-headless, runner: ubuntu-22.04 }

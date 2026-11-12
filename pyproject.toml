@@ -887,3 +887,90 @@ forbidden_modules = ["napari_builtins"]
 
 [tool.check-wheel-contents]
 toplevel = ["napari", "napari_builtins"]
+
+# ---------------------------------------------------------------------------
+# pixi (https://pixi.sh)
+#
+# pixi reads this file as its manifest, so:
+#   * `project.dependencies` become the default feature (as PyPI dependencies),
+#   * every `project.optional-dependencies` extra AND every `dependency-groups`
+#     group becomes a pixi feature of the same name (pyqt6, pyside6,
+#     optional-numba, testing, testing_extra, gallery, docs, ...).
+# Environments below are just lists of those features, so nothing in this
+# table duplicates a dependency from above.
+#
+# Common commands:
+#   pixi run test                              # default env (py313 + PyQt6)
+#   pixi run -e test-py311-pyqt6 test
+#   pixi run -e test-py312-headless test
+#   pixi update                                # refresh pixi.lock
+# ---------------------------------------------------------------------------
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+requires-pixi = ">=0.74"
+
+# napari itself, editable, in every environment
+[tool.pixi.pypi-dependencies]
+napari = { path = ".", editable = true }
+
+# Python version features: pixi provides only the interpreter from conda-forge,
+# everything else comes from PyPI using the pins above.
+[tool.pixi.feature.py311.dependencies]
+python = "3.11.*"
+
+[tool.pixi.feature.py312.dependencies]
+python = "3.12.*"
+
+[tool.pixi.feature.py313.dependencies]
+python = "3.13.*"
+
+[tool.pixi.feature.py314.dependencies]
+python = "3.14.*"
+
+# Restrict CI-only variants (and envs needing torch, which has no osx-64
+# wheels) to the three common platforms, to keep the lock smaller. Not linux-64
+# alone: napari's metadata (dynamic version) is built with a Python that runs
+# on the machine doing `pixi lock`, so every env must include the platform of
+# anyone who updates the lock.
+[tool.pixi.feature.main-platforms]
+platforms = ["linux-64", "osx-arm64", "win-64"]
+
+# tasks
+[tool.pixi.feature.test.tasks]
+test = "pytest src/napari src/napari_builtins --color=yes --import-mode=importlib"
+test-cov = "coverage run --parallel-mode -m pytest src/napari src/napari_builtins --color=yes --import-mode=importlib"
+
+[tool.pixi.feature.headless-test.tasks]
+test = { cmd = "pytest src/napari src/napari_builtins --color=yes --import-mode=importlib --ignore src/napari/_vispy --ignore src/napari/_qt --ignore src/napari/_tests --ignore src/napari_builtins/_qt", depends-on = ["_strip-qt"] }
+test-cov = { cmd = "coverage run --parallel-mode -m pytest src/napari src/napari_builtins --color=yes --import-mode=importlib --ignore src/napari/_vispy --ignore src/napari/_qt --ignore src/napari/_tests --ignore src/napari_builtins/_qt", depends-on = ["_strip-qt"] }
+# the `testing` group includes pytest-qt, which errors without a Qt binding
+_strip-qt = "python -m pip uninstall -y pytest-qt qtpy"
+
+[tool.pixi.feature.examples-test.tasks]
+test = "pytest src/napari/_tests/test_examples.py -v --color=yes --import-mode=importlib"
+test-cov = "coverage run --parallel-mode -m pytest src/napari/_tests/test_examples.py -v --color=yes --import-mode=importlib"
+
+[tool.pixi.environments]
+default = ["py313", "pyqt6", "optional-numba", "testing", "test"]
+
+# python x backend
+test-py311-pyqt6 = ["py311", "pyqt6", "optional-numba", "testing", "test"]
+test-py312-pyqt6 = ["py312", "pyqt6", "optional-numba", "testing", "test"]
+test-py313-pyqt6 = ["py313", "pyqt6", "optional-numba", "testing", "test"]
+test-py314-pyqt6 = ["py314", "pyqt6", "optional-numba", "testing", "test"]
+test-py314-pyside6 = ["py314", "pyside6", "optional-numba", "testing", "test", "main-platforms"]
+
+# variants
+test-py314-pyqt6-nonumba = ["py314", "pyqt6", "testing", "test"]
+test-py311-pyqt6-torch = ["py311", "pyqt6", "optional-numba", "testing", "testing_extra", "test", "main-platforms"]
+test-py314-pyqt6-torch = ["py314", "pyqt6", "optional-numba", "testing", "testing_extra", "test", "main-platforms"]
+test-py312-pyside6-torch = ["py312", "pyside6", "optional-numba", "testing", "testing_extra", "test", "main-platforms"]
+test-py313-pyqt6-alloptional = ["py313", "pyqt6", "all_optional", "testing", "test", "main-platforms"]
+
+# headless (no Qt binding)
+test-py311-headless = ["py311", "optional-numba", "testing", "headless-test", "main-platforms"]
+test-py312-headless = ["py312", "optional-numba", "testing", "headless-test", "main-platforms"]
+
+# examples suite
+test-py312-examples = ["py312", "pyqt6", "optional-numba", "testing", "gallery", "examples-test", "main-platforms"]
