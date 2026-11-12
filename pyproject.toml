@@ -903,6 +903,7 @@ toplevel = ["napari", "napari_builtins"]
 #   pixi run test                              # default env (py313 + PyQt6)
 #   pixi run -e test-py311-pyqt6 test
 #   pixi run -e test-py312-headless test
+#   pixi run -e min-req-py311-pyqt6 test       # lowest versions of direct deps
 #   pixi update                                # refresh pixi.lock
 # ---------------------------------------------------------------------------
 [tool.pixi.workspace]
@@ -935,6 +936,20 @@ python = "3.14.*"
 # anyone who updates the lock.
 [tool.pixi.feature.main-platforms]
 platforms = ["linux-64", "osx-arm64", "win-64"]
+
+# Minimum requirements: lowest versions of direct dependencies, wheels only.
+# Like tox-min-req, requirements with a lower bound resolve to that bound. Unlike
+# it, requirements WITHOUT a lower bound also resolve to their oldest version,
+# so missing bounds show up as failures instead of silently testing the latest.
+# pixi resolves each platform separately with that platform's wheel tags, so with
+# `no-build` this is the oldest release that ships a wheel for that Python and
+# platform (pywin32 303 on cp311, not an sdist-only ancient release).
+# `python` is also resolved lowest (3.11.0).
+[tool.pixi.feature.min-req]
+solve-strategy = "lowest-direct"
+
+[tool.pixi.feature.min-req.pypi-options]
+no-build = true
 
 # tasks
 [tool.pixi.feature.test.tasks]
@@ -974,3 +989,6 @@ test-py312-headless = ["py312", "optional-numba", "testing", "headless-test", "m
 
 # examples suite
 test-py312-examples = ["py312", "pyqt6", "optional-numba", "testing", "gallery", "examples-test", "main-platforms"]
+
+# minimum requirements (replaces tox-min-req)
+min-req-py311-pyqt6 = ["py311", "pyqt6", "optional-numba", "testing", "test", "min-req"]

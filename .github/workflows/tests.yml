@@ -223,6 +223,8 @@ jobs:
           - { environment: test-py311-headless, runner: ubuntu-22.04 }
           - { environment: test-py314-pyqt6-torch, runner: ubuntu-latest }
           - { environment: test-py312-pyside6-torch, runner: ubuntu-latest }
+          # minimum requirements (replaces tox-min-req, MIN_REQ=1)
+          - { environment: min-req-py311-pyqt6, runner: ubuntu-22.04 }
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
