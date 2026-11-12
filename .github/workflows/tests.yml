@@ -243,6 +243,28 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
+  # conda-forge: napari built as a conda package (pixi-build) and tested against
+  # conda-forge builds of its dependencies. Separate workspace, see
+  # tools/conda-forge/pixi.toml.
+  # ---------------------------------------------------------------------------
+  test-conda-forge:
+    name: conda-forge
+    needs: test-initial
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest]
+        python: ["313"]
+        backend: [pyqt6, pyside6]
+    uses: ./.github/workflows/reusable_conda_forge_test.yml
+    with:
+      python_version: ${{ matrix.python }}
+      platform: ${{ matrix.platform }}
+      qt_backend: ${{ matrix.backend }}
+
+  # ---------------------------------------------------------------------------
   # Combine coverage across whichever scope ran and print a report. Not gated
   # (no fail-under) and not uploaded anywhere — informational only.
   # ---------------------------------------------------------------------------
