@@ -44,11 +44,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      # Pre-releases are a moving target on purpose, so this job resolves fresh
+      # with uv on every run instead of using pixi.lock.
+      - name: Set up Python ${{ matrix.python }} and uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python }}
-          cache-dependency-path: pyproject.toml
+          activate-environment: true
 
       - name: Setup Graphviz
         uses: ts-graphviz/setup-graphviz@b1de5da23ed0a6d14e0aeee8ed52fdd87af2363c # v2.0.2
@@ -66,28 +68,39 @@ jobs:
           wm: herbstluftwm
 
 
-      - name: Install dependencies
+      - name: Install napari with pre-release dependencies
+        shell: bash
         run: |
-          pip install --upgrade pip
-          # tox 4.67.5 rejects --runner virtualenv with an empty runner registry.
-          pip install setuptools "tox!=4.67.5" tox-gh-actions tox-uv tox-min-req
+          case "${BACKEND}" in
+            pyqt6) extras="pyqt6,optional-numba" ;;
+            pyqt6_no_numba) extras="pyqt6" ;;
+            pyside6) extras="pyside6,optional-numba" ;;
+            *) echo "::error::unknown backend ${BACKEND}"; exit 1 ;;
+          esac
+          uv pip install --prerelease allow --index-strategy unsafe-best-match \
+            --extra-index-url https://www.riverbankcomputing.com/pypi/simple/ \
+            --only-binary PyQt6 \
+            --constraints resources/constraints/version_denylist.txt \
+            -e ".[${extras}]" --group testing \
+            pytest-json-report objgraph lxml_html_clean
+          uv pip list
+        env:
+          BACKEND: ${{ matrix.backend }}
 
-      - name: Test with tox (with retry)
+      - name: Test (with retry)
         timeout-minutes: 50
         shell: bash
         run: |
-          python -m tox -v --pre --recreate  --runner virtualenv || {
-            echo "Tox failed, retrying in 30 seconds..."
+          pytest_args=(--color=yes --basetemp=.pytest_tmp --ignore tools --maxfail=5
+            --json-report --json-report-file=report-pre.json
+            --save-leaked-object-graph --import-mode=importlib)
+          python -m pytest "${pytest_args[@]}" || {
+            echo "Tests failed, retrying in 30 seconds..."
             sleep 30
-            python -m tox -v --pre --recreate  --runner virtualenv
+            python -m pytest "${pytest_args[@]}"
           }
         env:
-          BACKEND: ${{ matrix.backend }}
-          PYTHON: ${{ matrix.python }}
           PYVISTA_OFF_SCREEN: True  # required for opengl on windows
-          PIP_CONSTRAINT: resources/constraints/version_denylist.txt
-          PIP_EXTRA_INDEX_URL: https://www.riverbankcomputing.com/pypi/simple/
-          PIP_ONLY_BINARY: "PyQt6"
 
       - name: Upload leaked viewer graph
         if: failure()
