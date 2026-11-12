@@ -14,12 +14,17 @@ The team creates a workflow to automate manual actions and steps.
 This results in improved accuracy and quality. Some key workflows:
 - `actionlint.yml` does static testing of GitHub action workflows
 - benchmarks
-- `reusable_run_tox_test.yml` uses our constraint files to install the
-  compatible dependencies for each test environment which may differ
-  by OS and qt versions. It is called from `test_pull_request.yml` and `test_comprehensive.yml`, not directly. 
-- `upgrade_test_constraints.yml` automates upgrading dependencies for
-  our test environments. It also has extensive commenting on what the
-  upgrade process entails.
+- `tests.yml` runs the test suite in the pixi environments defined in
+  `pyproject.toml` (`[tool.pixi]`) and locked in `pixi.lock`, through the
+  composite action in `.github/actions/pixi-test`. Run any matrix cell
+  locally with `pixi run -e <environment> test`.
+- `test_pull_requests.yml` runs the import-lint, manifest and benchmark
+  checks on each pull request.
+- `reusable_conda_forge_test.yml` tests napari against conda-forge packages
+  (`tools/conda-forge/pixi.toml`).
+- `upgrade_test_constraints.yml` automates upgrading the remaining
+  constraint files (docker, docs, extension checks). It also has extensive
+  commenting on what the upgrade process entails.
 
 If adding a workflow, please take a moment to explain its purpose at the
 top of its file.
