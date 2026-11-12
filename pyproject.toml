@@ -905,6 +905,7 @@ toplevel = ["napari", "napari_builtins"]
 #   pixi run -e test-py312-headless test
 #   pixi run -e min-req-py311-pyqt6 test       # lowest versions of direct deps
 #   pixi run -e docs docs slimfast ../docs     # build napari/docs against this clone
+#   pixi run -e lint import-lint               # also: -e package check-manifest, -e typing pyrefly
 #   pixi update                                # refresh pixi.lock
 # ---------------------------------------------------------------------------
 [tool.pixi.workspace]
@@ -980,6 +981,42 @@ args = [
 ]
 description = "Build napari/docs (default ../docs) with this napari checkout"
 
+# Checks that don't need napari installed (no-default-feature environments).
+# Versions are pinned by pixi.lock, like the uv-compiled requirement files were.
+[tool.pixi.feature.lint.pypi-dependencies]
+prek = "*"
+import-linter = "*"
+
+[tool.pixi.feature.lint.tasks]
+import-lint = { cmd = "prek run --hook-stage manual import-linter --all-files", env = { PYTHONPATH = "src" } }
+
+[tool.pixi.feature.package.pypi-dependencies]
+check-manifest = "*"
+build = "*"
+twine = "*"
+
+[tool.pixi.feature.package.tasks]
+check-manifest = "check-manifest"
+build-package = "python -m build && twine check dist/*"
+
+# pyrefly checks src/napari against the stubs of a few runtime dependencies
+# (replaces resources/requirements_pyrefly.in/.txt)
+[tool.pixi.feature.typing.pypi-dependencies]
+pyrefly = "*"
+magicgui = "*"
+app-model = "*"
+numpy = "!=2.2.0,!=2.2.1,!=2.2.2,!=2.2.3"
+npe2 = "*"
+pydantic = "*"
+qtpy = "*"
+pyside6-essentials = "*"
+types-PyYAML = "*"
+types-setuptools = "*"
+types-requests = "*"
+
+[tool.pixi.feature.typing.tasks]
+pyrefly = "pyrefly check"
+
 [tool.pixi.environments]
 default = ["py313", "pyqt6", "optional-numba", "testing", "test"]
 
@@ -1009,3 +1046,8 @@ min-req-py311-pyqt6 = ["py311", "pyqt6", "optional-numba", "testing", "test", "m
 
 # napari/docs repo built against this checkout (docs dependency group)
 docs = ["py313", "pyqt6", "docs", "docs-tasks", "main-platforms"]
+
+# checks (no napari install)
+lint = { features = ["py314", "lint"], no-default-feature = true }
+package = { features = ["py314", "package"], no-default-feature = true }
+typing = { features = ["py312", "typing", "main-platforms"], no-default-feature = true }
