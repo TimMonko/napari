@@ -54,6 +54,7 @@ dependencies = [
     "napari-svg>=0.1.8",
     "npe2>=0.10.0",
     "numpy>=1.25",
+    "numpy>=2.3.2 ; python_version >= '3.14'",
     "pandas>=1.5.0",
     "Pillow>=10.0",
     "pint>=0.17",
