@@ -39,7 +39,6 @@ class ZoomOverlay(CanvasOverlay):
         (0, 0),
         (0, 0),
     )
-    gridded: bool = True
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

@@ -195,6 +195,29 @@ def test_grid_mode(qt_viewer):
     assert len(canvas.grid_views) == 1
 
 
+def test_nontiled_canvas_overlays_not_gridded(qt_viewer):
+    """Zoom box uses whole-canvas coordinates, so it must not be duplicated
+    across grid viewboxes (it would be drawn offset in all but the first)."""
+    viewer = qt_viewer.viewer
+    canvas = qt_viewer.canvas
+
+    viewer.add_image(np.ones((10, 10)))
+    viewer.add_image(np.ones((10, 10)))
+    viewer.canvas.grid.enabled = True
+
+    zoom_box = viewer.canvas.overlays._zoom_box
+    zoom_box.visible = True
+    canvas.on_draw(None)
+
+    vispy_zoom = canvas._viewer_overlay_to_visual[zoom_box]
+    assert len(vispy_zoom) == 1
+    assert vispy_zoom[0].node.parent is canvas.view
+
+    # non-tiled overlays must not take part in tiling
+    tiled = [o for o, *_ in canvas._get_ordered_visible_canvas_overlays()]
+    assert zoom_box not in tiled
+
+
 def test_tiling_canvas_overlays(qt_viewer):
     viewer = qt_viewer.viewer
     canvas = qt_viewer.canvas

@@ -8,7 +8,7 @@ import warnings
 from functools import partial
 from itertools import zip_longest
 from types import MethodType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard
 from weakref import WeakSet
 
 import numpy as np
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from napari._vispy.layers.base import VispyBaseLayer
     from napari._vispy.overlays.base import (
         VispyBaseOverlay,
-        VispyCanvasOverlay,
+        VispyTiledCanvasOverlay,
     )
     from napari.components import ViewerModel
     from napari.components.overlays import Overlay
@@ -928,9 +928,6 @@ class VispyCanvas:
         overlay.events.visible.connect(
             self._update_tiled_overlay_positions, unique=True
         )
-        overlay.events.gridded.connect(
-            self._update_viewer_overlays, unique=True
-        )
 
     def _disconnect_tiled_overlay_events(self, overlay: Overlay) -> None:
         overlay.events.position.disconnect(
@@ -966,6 +963,8 @@ class VispyCanvas:
         )
         # delete outdated overlays
         for overlay in set(self._viewer_overlay_to_visual) - set(all_overlays):
+            if isinstance(overlay, CanvasOverlay):
+                overlay.events.gridded.disconnect(self._update_viewer_overlays)
             if isinstance(overlay, TiledCanvasOverlay):
                 self._disconnect_tiled_overlay_events(overlay)
             vispy_overlays = self._viewer_overlay_to_visual.pop(overlay)
@@ -986,13 +985,18 @@ class VispyCanvas:
 
             canvas_overlay = isinstance(overlay, CanvasOverlay)
             if canvas_overlay:
+                overlay.events.gridded.connect(
+                    self._update_viewer_overlays, unique=True
+                )
+            if isinstance(overlay, TiledCanvasOverlay):
                 self._connect_tiled_overlay_events(overlay)
 
             vispy_overlays = self._viewer_overlay_to_visual.setdefault(
                 overlay, []
             )
 
-            # NOTE: scene overlays and nontiling canvas ones are always gridded!
+            # NOTE: scene overlays are always gridded; canvas overlays
+            #       (tiled or not) follow their `gridded` field
             gridded = (
                 self.viewer.canvas.grid.enabled
                 and (not canvas_overlay or overlay.gridded)
@@ -1085,10 +1089,10 @@ class VispyCanvas:
 
             vispy_overlay = overlay_to_visual.get(overlay, None)
 
-            if isinstance(overlay, CanvasOverlay):
-                if isinstance(overlay, TiledCanvasOverlay):
-                    self._connect_tiled_overlay_events(overlay)
+            if isinstance(overlay, TiledCanvasOverlay):
+                self._connect_tiled_overlay_events(overlay)
 
+            if isinstance(overlay, CanvasOverlay):
                 if self.viewer.canvas.grid.enabled:
                     row, col = self.viewer.canvas.grid.position(
                         self.viewer.layers.index(layer),
@@ -1118,7 +1122,9 @@ class VispyCanvas:
 
     def _get_ordered_visible_canvas_overlays(
         self,
-    ) -> Iterator[tuple[CanvasOverlay, VispyCanvasOverlay, Node | None]]:
+    ) -> Iterator[
+        tuple[TiledCanvasOverlay, VispyTiledCanvasOverlay, Node | None]
+    ]:
         """
         Iterator over visible canvas overlays by grid viewbox, in tiling order.
 
@@ -1126,14 +1132,16 @@ class VispyCanvas:
         the index of the view in the grid where the overlay should be displayed.
         The view `None` is special cased to refer to the base, non-gridded view.
 
-        Note that some canvas overlays do no use CanvasPosition, but are instead
-        free-floating (such as the cursor overlay), so those are skipped
+        Non-tiled canvas overlays (such as the brush circle or zoom box) are
+        free-floating and are skipped.
         """
 
-        def is_visible_tileable(overlay):
+        def is_visible_tileable(
+            overlay: Overlay,
+        ) -> TypeGuard[TiledCanvasOverlay]:
             return overlay.visible and isinstance(overlay, TiledCanvasOverlay)
 
-        def is_gridded(overlay: CanvasOverlay) -> bool:
+        def is_gridded(overlay: TiledCanvasOverlay) -> bool:
             return bool(
                 overlay.gridded
                 and self.viewer.canvas.grid.enabled
