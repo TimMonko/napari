@@ -13,7 +13,14 @@ from pydantic import (
 from pydantic._internal._model_construction import ModelMetaclass
 
 from napari._pydantic_util import get_inner_type, get_outer_type
-from napari.utils.events.event import EmitterGroup, Event
+from napari.utils.events.event import (
+    EmitterGroup,
+    Event,
+    EventEmitter,
+    RenamedWarningEmitter,
+    WarningEmitter,
+)
+from napari.utils.migrations import RenamedProperty
 from napari.utils.misc import pick_equality_operator
 
 # encoders for non-napari specific field types.  To declare a custom encoder
@@ -169,6 +176,8 @@ def _get_field_dependents(cls: 'EventedModel') -> dict[str, set[str]]:
         # if dependencies haven't been explicitly defined, we can glean
         # them from the property.fget code object:
         for prop_name, prop in cls.__properties__.items():
+            if isinstance(prop, RenamedProperty):
+                continue
             _update_dependents_from_property_code(cls, prop_name, prop, deps)
     return deps
 
@@ -224,7 +233,11 @@ class EventedModel(BaseModel, metaclass=EventedMetaclass):
         ]
 
         self._events.add(
-            **dict.fromkeys(field_events + list(self.__properties__))
+            **dict.fromkeys(field_events),
+            **{
+                name: _property_event_emitter(name, prop)
+                for name, prop in self.__properties__.items()
+            },
         )
 
         # while seemingly redundant, this next line is very important to maintain
@@ -322,6 +335,10 @@ class EventedModel(BaseModel, metaclass=EventedMetaclass):
     def _setattr_impl(self, name: str, value: Any) -> None:
         if name not in getattr(self, 'events', {}):
             # fallback to default behavior
+            self._super_setattr_(name, value)
+            return
+        if isinstance(self.__properties__.get(name), RenamedProperty):
+            # the alias writes to its target, whose own event is forwarded
             self._super_setattr_(name, value)
             return
 
@@ -522,3 +539,22 @@ class ComparisonDelayer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._target._delay_check_semaphore -= 1
         self._target._check_if_values_changed_and_emit_if_needed()
+
+
+def _property_event_emitter(name: str, prop: property) -> EventEmitter:
+    """Return the event emitter for a property.
+
+    Deprecated properties get an emitter that warns on connect: a
+    ``RenamedProperty`` forwards the event of its target, and a getter
+    decorated with ``@deprecated`` reuses its deprecation message.
+    """
+    if isinstance(prop, RenamedProperty):
+        return RenamedWarningEmitter(
+            message=prop.event_message,
+            category=prop.category,
+            new_path=prop.new_name,
+            type_name=name,
+        )
+    if (message := getattr(prop.fget, '__deprecated__', None)) is not None:
+        return WarningEmitter(message=message, type_name=name)
+    return EventEmitter(type_name=name)
