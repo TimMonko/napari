@@ -279,6 +279,35 @@ def test_camera_orientation_3d(make_napari_viewer, qtbot):
     assert np.mean(sshot_towards) > np.mean(sshot_away)
 
 
+@pytest.mark.parametrize(
+    'orientation',
+    [
+        ('towards', 'down', 'left'),
+        ('towards', 'up', 'right'),
+        ('away', 'down', 'right'),
+        ('away', 'up', 'left'),
+    ],
+)
+def test_camera_orientation_change_keeps_angles(
+    make_napari_viewer, orientation
+):
+    """Changing orientation in 3D must not rewrite the camera angles."""
+    viewer = make_napari_viewer()
+    canvas = viewer.window._qt_viewer.canvas
+    viewer.add_image(np.zeros((10, 10, 10)))
+    viewer.dims.ndisplay = 3
+    angles = (30, -20, 45)
+    viewer.scene.camera.angles = angles
+
+    viewer.scene.camera.orientation = orientation
+
+    # the vispy camera reflects the new orientation immediately...
+    np.testing.assert_allclose(canvas.camera.angles, angles, atol=1e-6)
+    # ...and syncing back on draw leaves the model angles untouched
+    canvas.on_draw()
+    np.testing.assert_allclose(viewer.scene.camera.angles, angles, atol=1e-6)
+
+
 ORIENTATIONS = [
     (depth, vertical, horizontal)
     for depth in ['towards', 'away']

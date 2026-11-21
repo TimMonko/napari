@@ -343,6 +343,9 @@ class VispyCamera:
         self._3D_camera.flip = _get_vispy_flipped_axes(
             self._camera.orientation, ndisplay=3
         )
+        # the vispy quaternion for given napari angles depends on the
+        # orientation, so it must be recomputed to keep the angles unchanged
+        self._on_angles_change()
 
     def _on_perspective_change(self) -> None:
         self.perspective = self._camera.perspective
