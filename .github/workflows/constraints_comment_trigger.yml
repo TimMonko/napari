@@ -5,6 +5,7 @@ on:
     types: [ created ]
 
 permissions:
+  contents: read
   pull-requests: write
   issues: write
 
@@ -14,6 +15,25 @@ jobs:
     if: github.event.issue.pull_request != '' && contains(github.event.comment.body, '@napari-bot update constraints')
     runs-on: ubuntu-slim
     steps:
+      - name: Require write access
+        # Only a maintainer starts the called workflow, which runs the pull
+        # request's compile script. The query reads the commenter's repository
+        # role. author_association is no substitute: it reports a private org
+        # member as CONTRIBUTOR.
+        run: |
+          PERMISSION=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/collaborators/${COMMENTER}/permission" \
+            | jq -r .permission)
+          echo "${COMMENTER} has ${PERMISSION} permission"
+          case "${PERMISSION}" in
+            admin|write) ;;
+            *) echo "::error::@napari-bot update constraints needs write access"; exit 1 ;;
+          esac
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENTER: ${{ github.event.comment.user.login }}
       - name: Add eyes reaction
         run: |
           COMMENT_ID=${{ github.event.comment.id }}
