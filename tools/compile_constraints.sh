@@ -113,10 +113,11 @@ set -x
 # -o resources/constraints/constraints_py3.9.txt - output file
 # pyproject.toml resources/constraints/version_denylist.txt - source files. the resources/constraints/version_denylist.txt - contains our test specific constraints like pytes-cov`
 #
+# --no-build - resolve from wheels and static metadata only, so no third-party build backend runs in a job that holds tokens
 # --extra pyqt6 etc - names of extra sections from pyproject.toml that should be checked for the dependencies list (maybe we could create a super extra section to collect them all in)
 pyproject_toml="pyproject.toml"
 constraints="resources/constraints"
-flags=(--quiet --extra pyqt6 --extra pyside6 --extra testing --group testing_extra --extra all_optional --exclude ${constraints}/napari_exclude.txt)
+flags=(--quiet --no-build --extra pyqt6 --extra pyside6 --extra testing --group testing_extra --extra all_optional --exclude ${constraints}/napari_exclude.txt)
 
 for pyv in 3.11 3.12 3.13 3.14; do
   uv pip compile --python-version ${pyv} --output-file ${constraints}/constraints_py${pyv}.txt "${upgrade_flag[@]}" ${pyproject_toml} ${constraints}/version_denylist.txt "${flags[@]}"
@@ -124,4 +125,4 @@ done
 
 uv pip compile --python-version 3.12 --output-file ${constraints}/constraints_py3.12_examples.txt "${upgrade_flag[@]}" ${pyproject_toml} ${constraints}/version_denylist.txt ${constraints}/version_denylist_examples.txt --group gallery "${flags[@]}"
 uv pip compile --python-version 3.12 --output-file ${constraints}/constraints_py3.12_docs.txt "${upgrade_flag[@]}" ${pyproject_toml} ${constraints}/version_denylist.txt ${constraints}/version_denylist_examples.txt --group docs "${flags[@]}"
-uv pip compile --python-version 3.12 --output-file resources/requirements_pyrefly.txt "${upgrade_flag[@]}" resources/requirements_pyrefly.in
+uv pip compile --python-version 3.12 --no-build --output-file resources/requirements_pyrefly.txt "${upgrade_flag[@]}" resources/requirements_pyrefly.in
